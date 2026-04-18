@@ -1,0 +1,274 @@
+-- ===================== Load Rayfield =====================
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+	Name = "Anime Power League",
+	LoadingTitle = "Quin",
+	LoadingSubtitle = "Anime Power League",
+	ToggleUIKeybind = "K",
+	Theme = "DarkBlue",
+})
+
+local Tab = Window:CreateTab("Auto Farm", "zap")
+
+local RS = game:GetService("ReplicatedStorage")
+
+local PunchTab = Window:CreateTab("Auto Punch", "swords")
+
+-- ===================== STRENGTH =====================
+local strength = false
+Tab:CreateToggle({
+	Name = "Strength",
+	Callback = function(v)
+		strength = v
+		if v then
+			spawn(function()
+				while strength do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(1)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== HEALTH =====================
+local health = false
+Tab:CreateToggle({
+	Name = "Health",
+	Callback = function(v)
+		health = v
+		if v then
+			spawn(function()
+				while health do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(2)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== PSYCHIC =====================
+local psychic = false
+Tab:CreateToggle({
+	Name = "Psychic",
+	Callback = function(v)
+		psychic = v
+		if v then
+			spawn(function()
+				while psychic do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(3)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== DEFENSE =====================
+local defense = false
+Tab:CreateToggle({
+	Name = "Defense",
+	Callback = function(v)
+		defense = v
+		if v then
+			spawn(function()
+				while defense do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(5)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== MAGIC =====================
+local magic = false
+Tab:CreateToggle({
+	Name = "Magic",
+	Callback = function(v)
+		magic = v
+		if v then
+			spawn(function()
+				while magic do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(6)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== MELEE =====================
+local melee = false
+Tab:CreateToggle({
+	Name = "Melee",
+	Callback = function(v)
+		melee = v
+		if v then
+			spawn(function()
+				while melee do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(7)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== AURA =====================
+local aura = false
+Tab:CreateToggle({
+	Name = "Aura",
+	Callback = function(v)
+		aura = v
+		if v then
+			spawn(function()
+				while aura do
+					task.wait()
+					RS.Events.TrainSignal:FireServer(8)
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== MOBILITY =====================
+local mobility = false
+Tab:CreateToggle({
+	Name = "Mobility",
+	Callback = function(v)
+		mobility = v
+		if v then
+			spawn(function()
+				while mobility do
+					task.wait()
+					RS.Events.TriggerMobility:FireServer()
+				end
+			end)
+		end
+	end
+})
+
+-- ===================== AUTO PUNCH TAB =====================
+
+local RS = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local AbilityEvent = RS.Events.AbilityEvent
+local enemiesFolder = workspace:WaitForChild("ActiveEnemies")
+
+local selectedZone = "1"
+local autoPunch = false
+
+PunchTab:CreateSection("Targeting")
+
+-- ===================== GET ZONES =====================
+local function getZones()
+	local list = {}
+	for _, zone in pairs(enemiesFolder:GetChildren()) do
+		table.insert(list, zone.Name)
+	end
+	return list
+end
+
+-- ===================== DROPDOWN =====================
+local ZoneDropdown = PunchTab:CreateDropdown({
+	Name = "Select Enemy Zone",
+	Options = getZones(),
+	CurrentOption = "1",
+	Callback = function(opt)
+		selectedZone = opt
+	end
+})
+
+-- ===================== REFRESH =====================
+PunchTab:CreateButton({
+	Name = "Refresh Zones",
+	Callback = function()
+		ZoneDropdown:SetOptions(getZones())
+	end
+})
+
+-- ===================== GET TARGET =====================
+local function getTarget(zone)
+	for _, enemy in pairs(zone:GetChildren()) do
+		return enemy
+	end
+	return nil
+end
+
+-- ===================== SMOOTH FOLLOW =====================
+local function stickToEnemy(hrp, targetPart)
+	local connection
+	
+	connection = RunService.RenderStepped:Connect(function()
+		if not targetPart or not targetPart.Parent then
+			connection:Disconnect()
+			return
+		end
+		
+		-- smooth positioning (no jitter)
+		hrp.CFrame = targetPart.CFrame * CFrame.new(0, 6, -2)
+	end)
+	
+	return connection
+end
+
+-- ===================== AUTO PUNCH =====================
+PunchTab:CreateToggle({
+	Name = "Auto Punch Enemies",
+	CurrentValue = false,
+	Callback = function(v)
+		autoPunch = v
+		
+		if v then
+			spawn(function()
+				while autoPunch do
+					local zone = enemiesFolder:FindFirstChild(selectedZone)
+					local char = player.Character
+					if not char then task.wait() continue end
+
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					if not hrp then task.wait() continue end
+
+					if zone then
+						local target = getTarget(zone)
+
+						if target then
+							local part = target:FindFirstChild("HumanoidRootPart") 
+								or target:FindFirstChild("Head")
+
+							if part then
+								local follow = stickToEnemy(hrp, part)
+
+								-- stay on enemy until it dies (model removed)
+								while autoPunch and target.Parent do
+									pcall(function()
+										AbilityEvent:FireServer(
+											"Punch",
+											hrp.Position,
+											2,
+											target
+										)
+									end)
+
+									task.wait()
+								end
+
+								if follow then
+									follow:Disconnect()
+								end
+							end
+						else
+							task.wait()
+						end
+					end
+				end
+			end)
+		end
+	end
+})
