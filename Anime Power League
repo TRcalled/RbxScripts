@@ -212,7 +212,7 @@ local function stickToEnemy(hrp, targetPart)
 		end
 		
 		-- smooth positioning (no jitter)
-		hrp.CFrame = targetPart.CFrame * CFrame.new(0, 6, -2)
+		hrp.CFrame = targetPart.CFrame * CFrame.new(0, 0, -5)
 	end)
 	
 	return connection
