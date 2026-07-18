@@ -186,7 +186,8 @@ local function CheckIfBad(Inst)
 
     elseif Inst:IsA("MeshPart") then
         if s.MeshParts.LowerQuality then
-            Inst.RenderFidelity, Inst.Reflectance, Inst.Material = Enum.RenderFidelity.Performance, 0, Enum.Material.SmoothPlastic
+            -- Removed RenderFidelity modification here to stop console errors
+            Inst.Reflectance, Inst.Material = 0, Enum.Material.SmoothPlastic
         end
         if s.MeshParts.Invisible then Inst.Transparency = 1 end
         if s.MeshParts.NoTexture then Inst.TextureID = "" end
