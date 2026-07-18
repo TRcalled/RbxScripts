@@ -1,67 +1,4 @@
-_G.Ignore            = _G.Ignore or {}
-_G.SendNotifications = true
-_G.ConsoleLogs       = false
-
-_G.Settings = {
-    -- Target Exclusions (What to keep safe)
-    Players = {
-        ["Ignore Me"]     = true,
-        ["Ignore Others"] = true,
-        ["Ignore Tools"]  = true
-    },
-
-    -- 3D Assets & Details
-    Meshes = {
-        NoMesh    = false, -- Set true to remove mesh data completely
-        NoTexture = true,  -- Strips VRAM-heavy textures
-        Destroy   = false
-    },
-    MeshParts = {
-        LowerQuality = true,
-        Invisible    = false,
-        NoTexture    = true,
-        NoMesh       = true,
-        Destroy      = false
-    },
-
-    -- 2D Visuals & UI
-    Images = {
-        Invisible = true,
-        Destroy   = true
-    },
-    TextLabels = {
-        LowerQuality = true,
-        Invisible    = false,
-        Destroy      = false
-    },
-
-    -- Effects & Visual Hazards
-    Explosions = {
-        Smaller   = true,
-        Invisible = true,
-        Destroy   = true
-    },
-    Particles = {
-        Invisible = true,
-        Destroy   = true
-    },
-
-    -- Global Core Optimizations
-    Other = {
-        ["FPS Cap"]             = true, -- Uncaps frame rate
-        ["No Shadows"]          = true,
-        ["No Clothes"]          = true,
-        ["No Camera Effects"]   = true,
-        ["Low Water Graphics"]  = true,
-        ["Low Rendering"]       = true,
-        ["Low Quality Parts"]   = true,
-        ["Low Quality Models"]  = true,
-        ["Reset Materials"]     = true,
-        ClearNilInstances       = true
-    }
-}
-
-
+-- [[ Core Optimization Engine ]]
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local Players = game:GetService("Players")
@@ -70,6 +7,25 @@ local StarterGui = game:GetService("StarterGui")
 local MaterialService = game:GetService("MaterialService")
 local Workspace = game:GetService("Workspace")
 local ME = Players.LocalPlayer
+
+-- Global configuration fallback guards (prevents script crashing if user config is empty/missing)
+_G.Ignore            = _G.Ignore or {}
+_G.SendNotifications = _G.SendNotifications ~= nil and _G.SendNotifications or true
+_G.ConsoleLogs       = _G.ConsoleLogs ~= nil and _G.ConsoleLogs or false
+
+_G.Settings = _G.Settings or {}
+_G.Settings.Players = _G.Settings.Players or { ["Ignore Me"] = true, ["Ignore Others"] = true, ["Ignore Tools"] = true }
+_G.Settings.Meshes = _G.Settings.Meshes or { NoMesh = false, NoTexture = true, Destroy = false }
+_G.Settings.MeshParts = _G.Settings.MeshParts or { LowerQuality = true, Invisible = false, NoTexture = true, NoMesh = true, Destroy = false }
+_G.Settings.Images = _G.Settings.Images or { Invisible = true, Destroy = true }
+_G.Settings.TextLabels = _G.Settings.TextLabels or { LowerQuality = true, Invisible = false, Destroy = false }
+_G.Settings.Explosions = _G.Settings.Explosions or { Smaller = true, Invisible = true, Destroy = true }
+_G.Settings.Particles = _G.Settings.Particles or { Invisible = true, Destroy = true }
+_G.Settings.Other = _G.Settings.Other or {
+    ["FPS Cap"] = true, ["No Shadows"] = true, ["No Clothes"] = true, ["No Camera Effects"] = true,
+    ["Low Water Graphics"] = true, ["Low Rendering"] = true, ["Low Quality Parts"] = true,
+    ["Low Quality Models"] = true, ["Reset Materials"] = true, ClearNilInstances = true
+}
 
 -- Hash map lookup instead of table.find for lightning-fast performance
 local BadClasses = {
@@ -93,13 +49,14 @@ local function Notify(text)
 end
 
 local function IsPlayerItem(Inst)
-    if _G.Settings.Players["Ignore Others"] then
+    local playersCfg = _G.Settings.Players
+    if playersCfg["Ignore Others"] then
         for _, v in ipairs(Players:GetPlayers()) do
             if v ~= ME and v.Character and Inst:IsDescendantOf(v.Character) then return true end
         end
     end
-    if _G.Settings.Players["Ignore Me"] and ME.Character and Inst:IsDescendantOf(ME.Character) then return true end
-    if _G.Settings.Players["Ignore Tools"] and (Inst:IsA("BackpackItem") or Inst:FindFirstAncestorWhichIsA("BackpackItem")) then return true end
+    if playersCfg["Ignore Me"] and ME.Character and Inst:IsDescendantOf(ME.Character) then return true end
+    if playersCfg["Ignore Tools"] and (Inst:IsA("BackpackItem") or Inst:FindFirstAncestorWhichIsA("BackpackItem")) then return true end
     return false
 end
 
@@ -167,7 +124,7 @@ local function OptimizeInstance(Inst)
             Inst.RenderFidelity, Inst.Reflectance, Inst.Material = Enum.RenderFidelity.Performance, 0, Enum.Material.SmoothPlastic
         end
         if cfg.MeshParts.Invisible then Inst.Transparency = 1 end
-        if cfg.MeshParts.NoTexture then Inst.TextureID = "" end
+        if cfg.MeshParts.NoTexture then Inst.TextureId = "" end -- Fixed casing typo (TextureID -> TextureId)
         if cfg.MeshParts.NoMesh then Inst.MeshId = "" end
         if cfg.MeshParts.Destroy then Inst:Destroy() end
     end
@@ -208,7 +165,7 @@ Notify("Optimizing " .. #Descendants .. " active instances. Brief freeze expecte
 
 for i, v in ipairs(Descendants) do
     OptimizeInstance(v)
-    if i % 3000 == 0 then task.wait() end -- Increased frequency slightly for optimization speed
+    if i % 3000 == 0 then task.wait() end
 end
 
 -- Continuous Dynamic Optimization
