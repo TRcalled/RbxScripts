@@ -1,4 +1,69 @@
 -- [[ Core Optimization Engine ]]
+-- // CONFIG //
+--[[
+_G.Ignore            = _G.Ignore or {}
+_G.SendNotifications = true
+_G.ConsoleLogs       = false
+
+_G.Settings = {
+    -- Target Exclusions (What to keep safe)
+    Players = {
+        ["Ignore Me"]     = true,
+        ["Ignore Others"] = true,
+        ["Ignore Tools"]  = true
+    },
+
+    -- 3D Assets & Details
+    Meshes = {
+        NoMesh    = false, -- Set true to remove mesh data completely
+        NoTexture = true,  -- Strips VRAM-heavy textures
+        Destroy   = false
+    },
+    MeshParts = {
+        LowerQuality = true,
+        Invisible    = false,
+        NoTexture    = true,
+        NoMesh       = true,
+        Destroy      = false
+    },
+
+    -- 2D Visuals & UI
+    Images = {
+        Invisible = true,
+        Destroy   = true
+    },
+    TextLabels = {
+        LowerQuality = true,
+        Invisible    = false,
+        Destroy      = false
+    },
+
+    -- Effects & Visual Hazards
+    Explosions = {
+        Smaller   = true,
+        Invisible = true,
+        Destroy   = true
+    },
+    Particles = {
+        Invisible = true,
+        Destroy   = true
+    },
+
+    -- Global Core Optimizations
+    Other = {
+        ["FPS Cap"]             = true, -- Uncaps frame rate
+        ["No Shadows"]          = true,
+        ["No Clothes"]          = true,
+        ["No Camera Effects"]   = true,
+        ["Low Water Graphics"]  = true,
+        ["Low Rendering"]       = true,
+        ["Low Quality Parts"]   = true,
+        ["Low Quality Models"]  = true,
+        ["Reset Materials"]     = true,
+        ClearNilInstances       = true
+    }
+}
+-- ]]
 if not game:IsLoaded() then game.Loaded:Wait() end
 
 local Players = game:GetService("Players")
