@@ -214,18 +214,41 @@ task.spawn(function()
     MiscTab:CreateButton({
         Name = "Run Anti-AFK Script",
         Callback = function()
-            pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Roblox%20Anti%20AFK%20script.lua"))()
+            -- Removed protective suppression so error alerts reveal exactly why a script fails to execute
+            local success, content = pcall(function()
+                return game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Roblox%20Anti%20AFK%20script.lua")
             end)
+            
+            if success and content then
+                local func, err = loadstring(content)
+                if func then
+                    task.spawn(func)
+                else
+                    warn("Compile error in Anti-AFK: " .. tostring(err))
+                end
+            else
+                warn("Failed to fetch Anti-AFK script: " .. tostring(content))
+            end
         end,
     })
 
     MiscTab:CreateButton({
         Name = "Run FPS Booster",
         Callback = function()
-            pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Fps%20Booster_Loader.lua"))()
+            local success, content = pcall(function()
+                return game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Fps%20Booster_Loader.lua")
             end)
+            
+            if success and content then
+                local func, err = loadstring(content)
+                if func then
+                    task.spawn(func)
+                else
+                    warn("Compile error in FPS Booster: " .. tostring(err))
+                end
+            else
+                warn("Failed to fetch FPS Booster script: " .. tostring(content))
+            end
         end,
     })
 
