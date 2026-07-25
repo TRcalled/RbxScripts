@@ -357,14 +357,14 @@ task.spawn(function()
                     press(randomSpawnBtn)
                 end
             end
-            task.wait(0.1)
+            task.wait(.1)
         end
     end)
 
     -- Dynamic Auto-Upgrade Color Trigger Engine & UI Auto-Dismissal Loop
     task.spawn(function()
         while true do
-            task.wait(0.1) -- Fast checking interval for instant responsiveness
+            task.wait() -- Fast checking interval for instant responsiveness
             
             local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
             if not playerGui then continue end
@@ -676,7 +676,7 @@ task.spawn(function()
         Name = "Run FPS Booster",
         Callback = function()
             pcall(function()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Fps%20Booster_Loader.lua"))()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/RbxScripts/refs/heads/main/Fps%20Booster_1.lua"))()
             end)
             CustomNotify("Tools", "FPS Booster Executed", 3)
         end,
