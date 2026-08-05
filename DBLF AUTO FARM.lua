@@ -1,17 +1,32 @@
---// UI Library Setup
+--// UI & Services Setup
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 
 -- Clean up existing UI if re-executed
-if CoreGui:FindFirstChild("AutoFarmGui") then
-	CoreGui.AutoFarmGui:Destroy()
+if CoreGui:FindFirstChild("IceSeaFarmGui") then
+	CoreGui.IceSeaFarmGui:Destroy()
 end
+
+--// THEME COLORS (Ice + Sea Palette)
+local THEME = {
+	MainBG = Color3.fromRGB(12, 18, 28),
+	HeaderBG = Color3.fromRGB(18, 28, 44),
+	CardBG = Color3.fromRGB(22, 34, 52),
+	AccentCyan = Color3.fromRGB(0, 210, 255),
+	AccentBlue = Color3.fromRGB(0, 132, 255),
+	TabInactive = Color3.fromRGB(20, 30, 46),
+	TabActive = Color3.fromRGB(0, 132, 255),
+	ToggleON = Color3.fromRGB(0, 180, 216),
+	ToggleOFF = Color3.fromRGB(28, 42, 62),
+	TextMain = Color3.fromRGB(230, 245, 255),
+	TextMuted = Color3.fromRGB(130, 160, 190)
+}
 
 --// MOB TO QUEST MAPPING
 local MOB_QUEST_MAP = {
@@ -19,12 +34,6 @@ local MOB_QUEST_MAP = {
 	["VegetaGoku"] = "VegetaGokuQuestFirstTime",
 	["VegetaChamber"] = "VegetaChamber",
 	["Vegeta Chamber"] = "VegetaChamber",
-}
-
---// Configurable Quest List
-local QUEST_LIST = {
-	"VegetaGokuQuestFirstTime",
-	"VegetaChamber",
 }
 
 local TRANSFORM_LIST = {
@@ -37,107 +46,240 @@ local TRANSFORM_LIST = {
 
 --// ScreenGui Creation
 local gui = Instance.new("ScreenGui")
-gui.Name = "AutoFarmGui"
+gui.Name = "IceSeaFarmGui"
 gui.ResetOnSpawn = false
 gui.Parent = CoreGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 320, 0, 580)
-mainFrame.Position = UDim2.new(0.5, -160, 0.4, -290)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+mainFrame.Size = UDim2.new(0, 310, 0, 310)
+mainFrame.Position = UDim2.new(0.5, -155, 0.35, -155)
+mainFrame.BackgroundColor3 = THEME.MainBG
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
+mainFrame.ClipsDescendants = true
 mainFrame.Parent = gui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = mainFrame
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
-title.BackgroundColor3 = Color3.fromRGB(35, 35, 42)
-title.Text = "Auto Farm & Quest Manager"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 16
-title.Font = Enum.Font.SourceSansBold
-title.Parent = mainFrame
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = THEME.AccentCyan
+mainStroke.Transparency = 0.6
+mainStroke.Thickness = 1.2
+mainStroke.Parent = mainFrame
+
+--// Title Bar
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.BackgroundColor3 = THEME.HeaderBG
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
 
 local titleCorner = Instance.new("UICorner")
-titleCorner.CornerRadius = UDim.new(0, 8)
-titleCorner.Parent = title
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
 
--- Helper Elements
-local function createLabel(text, posY)
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(0.9, 0, 0, 20)
-	label.Position = UDim2.new(0.05, 0, 0, posY)
-	label.BackgroundTransparency = 1
-	label.Text = text
-	label.TextColor3 = Color3.fromRGB(180, 180, 190)
-	label.TextSize = 12
-	label.Font = Enum.Font.SourceSansSemibold
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Parent = mainFrame
-	return label
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -40, 1, 0)
+titleText.Position = UDim2.new(0, 12, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "🌊 ICE & SEA HUB"
+titleText.TextColor3 = THEME.AccentCyan
+titleText.TextSize = 14
+titleText.Font = Enum.Font.GothamBold
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- Minimize Button
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 26, 0, 26)
+minimizeBtn.Position = UDim2.new(1, -31, 0, 5)
+minimizeBtn.BackgroundColor3 = THEME.CardBG
+minimizeBtn.Text = "—"
+minimizeBtn.TextColor3 = THEME.TextMain
+minimizeBtn.TextSize = 12
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = titleBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeBtn
+
+-- Body Container (Collapsible)
+local bodyContainer = Instance.new("Frame")
+bodyContainer.Size = UDim2.new(1, 0, 1, -36)
+bodyContainer.Position = UDim2.new(0, 0, 0, 36)
+bodyContainer.BackgroundTransparency = 1
+bodyContainer.Parent = mainFrame
+
+local isMinimized = false
+local function toggleMinimize()
+	isMinimized = not isMinimized
+	bodyContainer.Visible = not isMinimized
+	mainFrame.Size = isMinimized and UDim2.new(0, 310, 0, 36) or UDim2.new(0, 310, 0, 310)
+	minimizeBtn.Text = isMinimized and "+" or "—"
+end
+minimizeBtn.MouseButton1Click:Connect(toggleMinimize)
+
+--// Navigation Tab Bar
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(0.92, 0, 0, 28)
+tabBar.Position = UDim2.new(0.04, 0, 0, 6)
+tabBar.BackgroundTransparency = 1
+tabBar.Parent = bodyContainer
+
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.Padding = UDim.new(0, 6)
+tabLayout.Parent = tabBar
+
+-- Tab Pages Holder
+local pagesContainer = Instance.new("Frame")
+pagesContainer.Size = UDim2.new(0.92, 0, 0, 220)
+pagesContainer.Position = UDim2.new(0.04, 0, 0, 40)
+pagesContainer.BackgroundTransparency = 1
+pagesContainer.Parent = bodyContainer
+
+local tabs = {}
+local pages = {}
+
+local function createTabPage(name)
+	local page = Instance.new("ScrollingFrame")
+	page.Name = name .. "Page"
+	page.Size = UDim2.new(1, 0, 1, 0)
+	page.BackgroundTransparency = 1
+	page.Visible = false
+	page.ScrollBarThickness = 3
+	page.ScrollBarImageColor3 = THEME.AccentCyan
+	page.CanvasSize = UDim2.new(0, 0, 0, 0)
+	page.Parent = pagesContainer
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 8)
+	layout.Parent = page
+
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+	end)
+
+	pages[name] = page
+	return page
 end
 
-local function createToggleButton(text, posY)
+local function selectTab(tabName)
+	for name, btn in pairs(tabs) do
+		local isSel = (name == tabName)
+		btn.BackgroundColor3 = isSel and THEME.TabActive or THEME.TabInactive
+		btn.TextColor3 = isSel and Color3.fromRGB(255, 255, 255) or THEME.TextMuted
+		if pages[name] then pages[name].Visible = isSel end
+	end
+end
+
+local function addTabButton(name, displayName)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(0.9, 0, 0, 28)
-	btn.Position = UDim2.new(0.05, 0, 0, posY)
-	btn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-	btn.Text = text .. ": OFF"
-	btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btn.TextSize = 13
-	btn.Font = Enum.Font.SourceSansBold
-	btn.Parent = mainFrame
+	btn.Size = UDim2.new(0.31, 0, 1, 0)
+	btn.BackgroundColor3 = THEME.TabInactive
+	btn.Text = displayName
+	btn.TextColor3 = THEME.TextMuted
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamSemibold
+	btn.Parent = tabBar
+
 	local btnCorner = Instance.new("UICorner")
 	btnCorner.CornerRadius = UDim.new(0, 6)
 	btnCorner.Parent = btn
+
+	tabs[name] = btn
+	btn.MouseButton1Click:Connect(function()
+		selectTab(name)
+	end)
+end
+
+-- Create Pages & Buttons
+createTabPage("Farm")
+createTabPage("Forms")
+createTabPage("Settings")
+
+addTabButton("Farm", "⚔️ Farm")
+addTabButton("Forms", "🔥 Forms")
+addTabButton("Settings", "⚙️ Config")
+
+selectTab("Farm")
+
+--// UI HELPER BUILDERS
+local function createToggleButton(parent, text, defaultVal, callback)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(1, 0, 0, 32)
+	btn.BackgroundColor3 = defaultVal and THEME.ToggleON or THEME.ToggleOFF
+	btn.Text = text .. ": " .. (defaultVal and "ON" or "OFF")
+	btn.TextColor3 = THEME.TextMain
+	btn.TextSize = 11
+	btn.Font = Enum.Font.GothamBold
+	btn.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
+
+	local state = defaultVal
+	btn.MouseButton1Click:Connect(function()
+		state = not state
+		btn.BackgroundColor3 = state and THEME.ToggleON or THEME.ToggleOFF
+		btn.Text = text .. ": " .. (state and "ON" or "OFF")
+		callback(state)
+	end)
 	return btn
 end
 
-local function createInputRow(labelText, defaultVal, posY)
-	local container = Instance.new("Frame")
-	container.Size = UDim2.new(0.9, 0, 0, 26)
-	container.Position = UDim2.new(0.05, 0, 0, posY)
-	container.BackgroundTransparency = 1
-	container.Parent = mainFrame
+local function createInputRow(parent, labelText, defaultVal, callback)
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, 0, 0, 32)
+	frame.BackgroundColor3 = THEME.CardBG
+	frame.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = frame
 
 	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(0.65, 0, 1, 0)
-	label.Position = UDim2.new(0, 0, 0, 0)
+	label.Size = UDim2.new(0.65, -10, 1, 0)
+	label.Position = UDim2.new(0, 10, 0, 0)
 	label.BackgroundTransparency = 1
 	label.Text = labelText
-	label.TextColor3 = Color3.fromRGB(180, 180, 190)
-	label.TextSize = 12
-	label.Font = Enum.Font.SourceSansSemibold
+	label.TextColor3 = THEME.TextMuted
+	label.TextSize = 11
+	label.Font = Enum.Font.GothamSemibold
 	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Parent = container
+	label.Parent = frame
 
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(0.3, 0, 1, 0)
-	box.Position = UDim2.new(0.7, 0, 0, 0)
-	box.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+	box.Size = UDim2.new(0.3, 0, 0.7, 0)
+	box.Position = UDim2.new(0.67, 0, 0.15, 0)
+	box.BackgroundColor3 = THEME.HeaderBG
 	box.Text = tostring(defaultVal)
-	box.TextColor3 = Color3.fromRGB(255, 255, 255)
-	box.TextSize = 12
-	box.Font = Enum.Font.SourceSansBold
+	box.TextColor3 = THEME.AccentCyan
+	box.TextSize = 11
+	box.Font = Enum.Font.GothamBold
 	box.ClearTextOnFocus = false
-	box.Parent = container
+	box.Parent = frame
 
 	local boxCorner = Instance.new("UICorner")
-	boxCorner.CornerRadius = UDim.new(0, 6)
+	boxCorner.CornerRadius = UDim.new(0, 4)
 	boxCorner.Parent = box
 
-	return box
+	box.FocusLost:Connect(function()
+		local val = tonumber(box.Text)
+		if val then callback(val) else box.Text = tostring(defaultVal) end
+	end)
 end
 
---// Logic Variables
+--// LOGIC VARIABLES
 local selectedTargets = {}
-local selectedQuests = {}
 local selectedTransform = TRANSFORM_LIST[1] or ""
 
 local isFarming = false
@@ -147,13 +289,10 @@ local isAutoTransform = false
 local isTargetInRange = false
 
 local mobIndex = 1
-local currentTween
+local lastQuestAttempt = 0
 
 local BEHIND_DISTANCE = 4.5
 local HEIGHT_OFFSET = 0.5
-local TWEEN_TIME = 0.001
-local ATTACK_RANGE_THRESHOLD = 15
-
 local predictionLead = 0.15
 local knockbackBuffer = 2.0
 
@@ -162,7 +301,7 @@ local lastTargetModel = nil
 local lastTargetTime = nil
 local lastPressedKeyText = ""
 
---// Remotes Setup
+--// REMOTES SETUP
 local CombatRemote = ReplicatedStorage
 	:WaitForChild("Assets", 5)
 	:WaitForChild("CombatAssets", 5)
@@ -173,19 +312,79 @@ local QuestRemote = ReplicatedStorage
 	:WaitForChild("Remotes", 5)
 	:WaitForChild("giveQuests", 5)
 
---// Quest Status Checker
-local function isInQuest()
-	local backpack = player:FindFirstChild("Backpack")
-	if backpack then
-		local inQuestObj = backpack:FindFirstChild("inQuest")
-		if inQuestObj and inQuestObj:IsA("BoolValue") then
-			return inQuestObj.Value
+--// HELPER FUNCTIONS
+local function getQuestForMob(mobName)
+	if not mobName then return nil end
+	if MOB_QUEST_MAP[mobName] then return MOB_QUEST_MAP[mobName] end
+	local lowerMob = mobName:lower()
+	for key, questName in pairs(MOB_QUEST_MAP) do
+		if lowerMob:find(key:lower(), 1, true) then
+			return questName
 		end
 	end
-	return false
+	return nil
 end
 
---// COMBO PRESSER LOGIC
+local function isPlayerCharacter(model)
+	return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local function isTargetAlive(model)
+	if not model or not model:IsA("Model") or not model.Parent then return false end
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	return hum and hum.Health > 0
+end
+
+local function findTargetModel(targetData)
+	if not targetData then return nil end
+	if targetData.location == "Bosses" then
+		local bossesFolder = workspace:FindFirstChild("Bosses")
+		return bossesFolder and bossesFolder:FindFirstChild(targetData.name)
+	elseif targetData.location == "Workspace" then
+		return workspace:FindFirstChild(targetData.name)
+	end
+	return nil
+end
+
+local function getAnyAliveTarget()
+	local bossesFolder = workspace:FindFirstChild("Bosses")
+	if bossesFolder then
+		for _, child in ipairs(bossesFolder:GetChildren()) do
+			if isTargetAlive(child) then return child, "Bosses" end
+		end
+	end
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child:IsA("Model") and child.Name ~= "Bosses" and not isPlayerCharacter(child) then
+			if isTargetAlive(child) then return child, "Workspace" end
+		end
+	end
+	return nil, nil
+end
+
+local function getActiveTargetArray()
+	local active = {}
+	for _, data in pairs(selectedTargets) do
+		if data.selected then table.insert(active, data) end
+	end
+	return active
+end
+
+local function getCharacter()
+	local char = player.Character
+	if not char then return nil, nil, nil end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	return char, hum, hrp
+end
+
+local function setNoclip(char, state)
+	if not char then return end
+	for _, v in ipairs(char:GetDescendants()) do
+		if v:IsA("BasePart") then v.CanCollide = not state end
+	end
+end
+
+--// COMBO PRESSER
 local KEY_MAP = {
 	["1"] = Enum.KeyCode.One, ["2"] = Enum.KeyCode.Two, ["3"] = Enum.KeyCode.Three,
 	["4"] = Enum.KeyCode.Four, ["5"] = Enum.KeyCode.Five, ["6"] = Enum.KeyCode.Six,
@@ -256,75 +455,30 @@ task.spawn(function()
 	bindComboPresser()
 end)
 
-local function getTransformRemote(formName)
-	local ssjsFolder = ReplicatedStorage:FindFirstChild("ssjs")
-	return ssjsFolder and ssjsFolder:FindFirstChild(formName)
-end
+--// TAB 1: FARM CONTROLS
 
-local function isPlayerCharacter(model)
-	return Players:GetPlayerFromCharacter(model) ~= nil
-end
-
-local function isTargetAlive(model)
-	if not model or not model:IsA("Model") then return false end
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	return hum and hum.Health > 0
-end
-
-local function findTargetModel(targetData)
-	if not targetData then return nil end
-	if targetData.location == "Bosses" then
-		local bossesFolder = workspace:FindFirstChild("Bosses")
-		return bossesFolder and bossesFolder:FindFirstChild(targetData.name)
-	elseif targetData.location == "Workspace" then
-		return workspace:FindFirstChild(targetData.name)
-	end
-	return nil
-end
-
-local function getAnyAliveTarget()
-	local bossesFolder = workspace:FindFirstChild("Bosses")
-	if bossesFolder then
-		for _, child in ipairs(bossesFolder:GetChildren()) do
-			if isTargetAlive(child) then return child, "Bosses" end
-		end
-	end
-	for _, child in ipairs(workspace:GetChildren()) do
-		if child:IsA("Model") and child.Name ~= "Bosses" and not isPlayerCharacter(child) then
-			if isTargetAlive(child) then return child, "Workspace" end
-		end
-	end
-	return nil, nil
-end
-
---// DROPDOWN BUILDERS
-
--- 1. Target Multi-Select Dropdown
-createLabel("Select Targets (Multi-Select):", 48)
-
+-- 1. Targets Dropdown
 local targetDropdownBtn = Instance.new("TextButton")
-targetDropdownBtn.Size = UDim2.new(0.9, 0, 0, 26)
-targetDropdownBtn.Position = UDim2.new(0.05, 0, 0, 68)
-targetDropdownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-targetDropdownBtn.Text = "Select Targets..."
-targetDropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetDropdownBtn.TextSize = 12
-targetDropdownBtn.Font = Enum.Font.SourceSans
-targetDropdownBtn.Parent = mainFrame
+targetDropdownBtn.Size = UDim2.new(1, 0, 0, 32)
+targetDropdownBtn.BackgroundColor3 = THEME.CardBG
+targetDropdownBtn.Text = "🎯 Target: Select Targets..."
+targetDropdownBtn.TextColor3 = THEME.TextMain
+targetDropdownBtn.TextSize = 11
+targetDropdownBtn.Font = Enum.Font.GothamSemibold
+targetDropdownBtn.Parent = pages["Farm"]
 
 local targetDdCorner = Instance.new("UICorner")
 targetDdCorner.CornerRadius = UDim.new(0, 6)
 targetDdCorner.Parent = targetDropdownBtn
 
 local targetContainer = Instance.new("ScrollingFrame")
-targetContainer.Size = UDim2.new(0.9, 0, 0, 80)
-targetContainer.Position = UDim2.new(0.05, 0, 0, 96)
-targetContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+targetContainer.Size = UDim2.new(1, 0, 0, 90)
+targetContainer.BackgroundColor3 = THEME.HeaderBG
 targetContainer.Visible = false
-targetContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-targetContainer.ScrollBarThickness = 4
+targetContainer.ScrollBarThickness = 3
+targetContainer.ScrollBarImageColor3 = THEME.AccentCyan
 targetContainer.ZIndex = 5
-targetContainer.Parent = mainFrame
+targetContainer.Parent = pages["Farm"]
 
 local targetLayout = Instance.new("UIListLayout")
 targetLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -335,7 +489,7 @@ local function updateTargetDropdownText()
 	for key, data in pairs(selectedTargets) do
 		if data.selected then table.insert(selectedList, data.name) end
 	end
-	targetDropdownBtn.Text = #selectedList == 0 and "Select Targets..." or table.concat(selectedList, ", ")
+	targetDropdownBtn.Text = #selectedList == 0 and "🎯 Target: Select Targets..." or "🎯 Targets (" .. #selectedList .. ")"
 end
 
 local function populateTargets()
@@ -366,20 +520,21 @@ local function populateTargets()
 
 		local btn = Instance.new("TextButton")
 		btn.Size = UDim2.new(1, 0, 0, 24)
-		btn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+		btn.BackgroundColor3 = THEME.CardBG
 		local isSel = selectedTargets[key].selected
-		btn.Text = (isSel and "[X] " or "[ ] ") .. item.name .. "  [" .. item.location .. "]"
-		btn.TextColor3 = isSel and Color3.fromRGB(80, 220, 80) or Color3.fromRGB(220, 220, 220)
-		btn.TextSize = 12
-		btn.Font = Enum.Font.SourceSans
+		btn.Text = (isSel and " [✓] " or " [ ] ") .. item.name
+		btn.TextColor3 = isSel and THEME.AccentCyan or THEME.TextMuted
+		btn.TextSize = 11
+		btn.Font = Enum.Font.Gotham
+		btn.TextXAlignment = Enum.TextXAlignment.Left
 		btn.ZIndex = 6
 		btn.Parent = targetContainer
 
 		btn.MouseButton1Click:Connect(function()
 			selectedTargets[key].selected = not selectedTargets[key].selected
 			local newState = selectedTargets[key].selected
-			btn.Text = (newState and "[X] " or "[ ] ") .. item.name .. "  [" .. item.location .. "]"
-			btn.TextColor3 = newState and Color3.fromRGB(80, 220, 80) or Color3.fromRGB(220, 220, 220)
+			btn.Text = (newState and " [✓] " or " [ ] ") .. item.name
+			btn.TextColor3 = newState and THEME.AccentCyan or THEME.TextMuted
 			updateTargetDropdownText()
 		end)
 	end
@@ -391,110 +546,54 @@ targetDropdownBtn.MouseButton1Click:Connect(function()
 	if targetContainer.Visible then populateTargets() end
 end)
 
--- 2. Quest Multi-Select Dropdown
-createLabel("Select Quests (Multi-Select):", 180)
-
-local questDropdownBtn = Instance.new("TextButton")
-questDropdownBtn.Size = UDim2.new(0.9, 0, 0, 26)
-questDropdownBtn.Position = UDim2.new(0.05, 0, 0, 200)
-questDropdownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-questDropdownBtn.Text = "Select Quests..."
-questDropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-questDropdownBtn.TextSize = 12
-questDropdownBtn.Font = Enum.Font.SourceSans
-questDropdownBtn.Parent = mainFrame
-
-local questDdCorner = Instance.new("UICorner")
-questDdCorner.CornerRadius = UDim.new(0, 6)
-questDdCorner.Parent = questDropdownBtn
-
-local questContainer = Instance.new("ScrollingFrame")
-questContainer.Size = UDim2.new(0.9, 0, 0, 70)
-questContainer.Position = UDim2.new(0.05, 0, 0, 228)
-questContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-questContainer.Visible = false
-questContainer.ScrollBarThickness = 4
-questContainer.ZIndex = 5
-questContainer.Parent = mainFrame
-
-local questLayout = Instance.new("UIListLayout")
-questLayout.SortOrder = Enum.SortOrder.LayoutOrder
-questLayout.Parent = questContainer
-
-local function updateQuestDropdownText()
-	local selectedList = {}
-	for qName, data in pairs(selectedQuests) do
-		if data.selected then table.insert(selectedList, qName) end
+createToggleButton(pages["Farm"], "Auto Farm", false, function(state)
+	isFarming = state
+	if isFarming then
+		targetContainer.Visible = false
+		bindComboPresser()
+	else
+		local char = player.Character
+		if char then setNoclip(char, false) end
+		lastTargetPos = nil
+		lastTargetModel = nil
+		lastPressedKeyText = ""
+		isTargetInRange = false
 	end
-	questDropdownBtn.Text = #selectedList == 0 and "Select Quests..." or table.concat(selectedList, ", ")
-end
-
-local function populateQuests()
-	for _, child in ipairs(questContainer:GetChildren()) do
-		if child:IsA("TextButton") then child:Destroy() end
-	end
-
-	for _, qName in ipairs(QUEST_LIST) do
-		if not selectedQuests[qName] then
-			selectedQuests[qName] = { name = qName, selected = true }
-		end
-
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, 0, 0, 24)
-		btn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-		local isSel = selectedQuests[qName].selected
-		btn.Text = (isSel and "[X] " or "[ ] ") .. qName
-		btn.TextColor3 = isSel and Color3.fromRGB(80, 220, 80) or Color3.fromRGB(220, 220, 220)
-		btn.TextSize = 12
-		btn.Font = Enum.Font.SourceSans
-		btn.ZIndex = 6
-		btn.Parent = questContainer
-
-		btn.MouseButton1Click:Connect(function()
-			selectedQuests[qName].selected = not selectedQuests[qName].selected
-			local newState = selectedQuests[qName].selected
-			btn.Text = (newState and "[X] " or "[ ] ") .. qName
-			btn.TextColor3 = newState and Color3.fromRGB(80, 220, 80) or Color3.fromRGB(220, 220, 220)
-			updateQuestDropdownText()
-		end)
-	end
-	updateQuestDropdownText()
-	questContainer.CanvasSize = UDim2.new(0, 0, 0, questLayout.AbsoluteContentSize.Y)
-end
-
-questDropdownBtn.MouseButton1Click:Connect(function()
-	questContainer.Visible = not questContainer.Visible
-	if questContainer.Visible then populateQuests() end
 end)
 
--- Initialize quest selections
-populateQuests()
+createToggleButton(pages["Farm"], "Wave Mode", false, function(state)
+	isWaveMode = state
+	targetDropdownBtn.Visible = not isWaveMode
+	if isWaveMode then targetContainer.Visible = false end
+end)
 
--- 3. Transformation Selector Dropdown
-createLabel("Select Transformation:", 232)
+createToggleButton(pages["Farm"], "Auto Quest", false, function(state)
+	isQuesting = state
+end)
+
+--// TAB 2: FORM CONTROLS
 
 local transformDropdownBtn = Instance.new("TextButton")
-transformDropdownBtn.Size = UDim2.new(0.9, 0, 0, 26)
-transformDropdownBtn.Position = UDim2.new(0.05, 0, 0, 252)
-transformDropdownBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-transformDropdownBtn.Text = selectedTransform ~= "" and selectedTransform or "Select Form..."
-transformDropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-transformDropdownBtn.TextSize = 12
-transformDropdownBtn.Font = Enum.Font.SourceSans
-transformDropdownBtn.Parent = mainFrame
+transformDropdownBtn.Size = UDim2.new(1, 0, 0, 32)
+transformDropdownBtn.BackgroundColor3 = THEME.CardBG
+transformDropdownBtn.Text = "⚡ Form: " .. (selectedTransform ~= "" and selectedTransform or "Select Form...")
+transformDropdownBtn.TextColor3 = THEME.TextMain
+transformDropdownBtn.TextSize = 11
+transformDropdownBtn.Font = Enum.Font.GothamSemibold
+transformDropdownBtn.Parent = pages["Forms"]
 
 local transformDdCorner = Instance.new("UICorner")
 transformDdCorner.CornerRadius = UDim.new(0, 6)
 transformDdCorner.Parent = transformDropdownBtn
 
 local transformContainer = Instance.new("ScrollingFrame")
-transformContainer.Size = UDim2.new(0.9, 0, 0, 90)
-transformContainer.Position = UDim2.new(0.05, 0, 0, 280)
-transformContainer.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+transformContainer.Size = UDim2.new(1, 0, 0, 90)
+transformContainer.BackgroundColor3 = THEME.HeaderBG
 transformContainer.Visible = false
-transformContainer.ScrollBarThickness = 4
+transformContainer.ScrollBarThickness = 3
+transformContainer.ScrollBarImageColor3 = THEME.AccentCyan
 transformContainer.ZIndex = 5
-transformContainer.Parent = mainFrame
+transformContainer.Parent = pages["Forms"]
 
 local transformLayout = Instance.new("UIListLayout")
 transformLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -508,17 +607,18 @@ local function populateTransforms()
 	for _, formName in ipairs(TRANSFORM_LIST) do
 		local btn = Instance.new("TextButton")
 		btn.Size = UDim2.new(1, 0, 0, 24)
-		btn.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
-		btn.Text = formName
-		btn.TextColor3 = (selectedTransform == formName) and Color3.fromRGB(80, 220, 80) or Color3.fromRGB(220, 220, 220)
-		btn.TextSize = 12
-		btn.Font = Enum.Font.SourceSans
+		btn.BackgroundColor3 = THEME.CardBG
+		btn.Text = "  " .. formName
+		btn.TextColor3 = (selectedTransform == formName) and THEME.AccentCyan or THEME.TextMuted
+		btn.TextSize = 11
+		btn.Font = Enum.Font.Gotham
+		btn.TextXAlignment = Enum.TextXAlignment.Left
 		btn.ZIndex = 6
 		btn.Parent = transformContainer
 
 		btn.MouseButton1Click:Connect(function()
 			selectedTransform = formName
-			transformDropdownBtn.Text = formName
+			transformDropdownBtn.Text = "⚡ Form: " .. formName
 			transformContainer.Visible = false
 		end)
 	end
@@ -530,52 +630,24 @@ transformDropdownBtn.MouseButton1Click:Connect(function()
 	if transformContainer.Visible then populateTransforms() end
 end)
 
--- Buttons & Controls
-local waveToggle = createToggleButton("Wave / Dungeon Mode", 290)
-local farmToggle = createToggleButton("Auto Farm", 325)
-local questToggle = createToggleButton("Auto Quest", 360)
-local transformToggle = createToggleButton("Auto Transform", 395)
-
-local predBox = createInputRow("Prediction Lead (s):", predictionLead, 432)
-local bufferBox = createInputRow("Knockback Buffer:", knockbackBuffer, 464)
-
-predBox.FocusLost:Connect(function()
-	local val = tonumber(predBox.Text)
-	predictionLead = val and math.clamp(val, 0, 1.0) or predictionLead
-	predBox.Text = tostring(predictionLead)
-end)
-
-bufferBox.FocusLost:Connect(function()
-	local val = tonumber(bufferBox.Text)
-	knockbackBuffer = val and math.clamp(val, 0, 15.0) or knockbackBuffer
-	bufferBox.Text = tostring(knockbackBuffer)
-end)
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(0.9, 0, 0, 20)
-statusLabel.Position = UDim2.new(0.05, 0, 0, 502)
-statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Status: Idle"
-statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-statusLabel.TextSize = 12
-statusLabel.Font = Enum.Font.SourceSansItalic
-statusLabel.Parent = mainFrame
-
-local noteLabel = Instance.new("TextLabel")
-noteLabel.Size = UDim2.new(0.9, 0, 0, 20)
-noteLabel.Position = UDim2.new(0.05, 0, 0, 545)
-noteLabel.BackgroundTransparency = 1
-noteLabel.Text = "Press 'Right Control' to hide/show UI"
-noteLabel.TextColor3 = Color3.fromRGB(100, 100, 110)
-noteLabel.TextSize = 11
-noteLabel.Font = Enum.Font.SourceSans
-noteLabel.Parent = mainFrame
+local function getTransformRemote(formName)
+	local ssjsFolder = ReplicatedStorage:FindFirstChild("ssjs")
+	return ssjsFolder and ssjsFolder:FindFirstChild(formName)
+end
 
 local function triggerTransform()
 	if not isAutoTransform or selectedTransform == "" then return end
 	local remote = getTransformRemote(selectedTransform)
 	if remote then remote:FireServer() end
 end
+
+createToggleButton(pages["Forms"], "Auto Transform", false, function(state)
+	isAutoTransform = state
+	if isAutoTransform then
+		transformContainer.Visible = false
+		triggerTransform()
+	end
+end)
 
 local function handleCharacterSpawn(char)
 	if not char then return end
@@ -592,78 +664,54 @@ end
 if player.Character then task.spawn(handleCharacterSpawn, player.Character) end
 player.CharacterAdded:Connect(handleCharacterSpawn)
 
-local function getActiveTargetArray()
-	local active = {}
-	for _, data in pairs(selectedTargets) do
-		if data.selected then table.insert(active, data) end
-	end
-	return active
-end
+--// TAB 3: SETTINGS & CONFIG
 
-local function getCharacter()
-	local char = player.Character
-	if not char then return nil, nil, nil end
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	return char, hum, hrp
-end
-
-local function setNoclip(char, state)
-	if not char then return end
-	for _, v in ipairs(char:GetDescendants()) do
-		if v:IsA("BasePart") then v.CanCollide = not state end
-	end
-end
-
--- Toggles
-waveToggle.MouseButton1Click:Connect(function()
-	isWaveMode = not isWaveMode
-	waveToggle.BackgroundColor3 = isWaveMode and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-	waveToggle.Text = "Wave / Dungeon Mode: " .. (isWaveMode and "ON" or "OFF")
-	targetDropdownBtn.AutoButtonColor = not isWaveMode
-	if isWaveMode then targetDropdownBtn.Text = "[Wave Mode Active]" else updateTargetDropdownText() end
+createInputRow(pages["Settings"], "Prediction Lead (s)", predictionLead, function(val)
+	predictionLead = math.clamp(val, 0, 1.0)
 end)
 
-farmToggle.MouseButton1Click:Connect(function()
-	isFarming = not isFarming
-	farmToggle.BackgroundColor3 = isFarming and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-	farmToggle.Text = "Auto Farm: " .. (isFarming and "ON" or "OFF")
-	if isFarming then
-		targetContainer.Visible = false
-		bindComboPresser()
-	else
-		if currentTween then currentTween:Cancel() end
-		local char = player.Character
-		if char then setNoclip(char, false) end
-		statusLabel.Text = "Status: Idle"
-		lastTargetPos = nil
-		lastTargetModel = nil
-		lastPressedKeyText = ""
-		isTargetInRange = false
-	end
+createInputRow(pages["Settings"], "Knockback Buffer", knockbackBuffer, function(val)
+	knockbackBuffer = math.clamp(val, 0, 15.0)
 end)
 
-questToggle.MouseButton1Click:Connect(function()
-	isQuesting = not isQuesting
-	questToggle.BackgroundColor3 = isQuesting and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-	questToggle.Text = "Auto Quest: " .. (isQuesting and "ON" or "OFF")
-	if isQuesting then questContainer.Visible = false end
-end)
+local statusCard = Instance.new("Frame")
+statusCard.Size = UDim2.new(1, 0, 0, 48)
+statusCard.BackgroundColor3 = THEME.CardBG
+statusCard.Parent = pages["Settings"]
 
-transformToggle.MouseButton1Click:Connect(function()
-	isAutoTransform = not isAutoTransform
-	transformToggle.BackgroundColor3 = isAutoTransform and Color3.fromRGB(50, 180, 50) or Color3.fromRGB(180, 50, 50)
-	transformToggle.Text = "Auto Transform: " .. (isAutoTransform and "ON" or "OFF")
-	if isAutoTransform then transformContainer.Visible = false triggerTransform() end
-end)
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 6)
+statusCorner.Parent = statusCard
 
-game:GetService("UserInputService").InputBegan:Connect(function(input, gpe)
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -16, 0, 20)
+statusLabel.Position = UDim2.new(0, 8, 0, 4)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = THEME.TextMuted
+statusLabel.TextSize = 10
+statusLabel.Font = Enum.Font.GothamSemibold
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = statusCard
+
+local noteLabel = Instance.new("TextLabel")
+noteLabel.Size = UDim2.new(1, -16, 0, 18)
+noteLabel.Position = UDim2.new(0, 8, 0, 24)
+noteLabel.BackgroundTransparency = 1
+noteLabel.Text = "Press 'Right Control' to Toggle UI"
+noteLabel.TextColor3 = THEME.AccentCyan
+noteLabel.TextSize = 10
+noteLabel.Font = Enum.Font.Gotham
+noteLabel.TextXAlignment = Enum.TextXAlignment.Left
+noteLabel.Parent = statusCard
+
+UserInputService.InputBegan:Connect(function(input, gpe)
 	if not gpe and input.KeyCode == Enum.KeyCode.RightControl then
-		gui.Enabled = not gui.Enabled
+		toggleMinimize()
 	end
 end)
 
---// Main Render Loop
+--// MAIN RENDER LOOP
 RunService.RenderStepped:Connect(function()
 	if not isFarming then 
 		isTargetInRange = false
@@ -682,7 +730,7 @@ RunService.RenderStepped:Connect(function()
 	if isWaveMode then
 		targetModel, targetLocation = getAnyAliveTarget()
 		if not targetModel then
-			statusLabel.Text = "Status: Waiting for next wave..."
+			statusLabel.Text = "Status: Waiting for wave..."
 			lastTargetPos = nil
 			isTargetInRange = false
 			return
@@ -690,7 +738,7 @@ RunService.RenderStepped:Connect(function()
 	else
 		local activeTargets = getActiveTargetArray()
 		if #activeTargets == 0 then
-			statusLabel.Text = "Status: No targets selected"
+			statusLabel.Text = "Status: No target selected"
 			lastTargetPos = nil
 			isTargetInRange = false
 			return
@@ -701,7 +749,7 @@ RunService.RenderStepped:Connect(function()
 		targetModel = findTargetModel(currentTargetData)
 
 		if not isTargetAlive(targetModel) then
-			statusLabel.Text = "Status: Searching for " .. currentTargetData.name
+			statusLabel.Text = "Status: Searching " .. currentTargetData.name
 			mobIndex += 1
 			if mobIndex > #activeTargets then mobIndex = 1 end
 			lastTargetPos = nil
@@ -711,34 +759,27 @@ RunService.RenderStepped:Connect(function()
 		targetLocation = currentTargetData.location
 	end
 
-	--// SEQUENTIAL DYNAMIC MULTI-QUEST ACCEPTANCE
-	if isQuesting and QuestRemote and targetModel then
-		if not isInQuest() then
-			local mobName = targetModel.Name
-			local targetQuest = MOB_QUEST_MAP[mobName]
-			
-			-- Accept mapped quest if checked in multi-select dropdown
-			if targetQuest and selectedQuests[targetQuest] and selectedQuests[targetQuest].selected then
+	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
+	if not targetRoot then
+		isTargetInRange = false
+		return
+	end
+
+	isTargetInRange = true
+
+	-- CONTINUOUS AUTO-QUESTING (3s Cooldown)
+	if isQuesting and QuestRemote then
+		local now = tick()
+		if (now - lastQuestAttempt) >= 3 then
+			lastQuestAttempt = now
+			local targetQuest = getQuestForMob(targetModel.Name)
+			if targetQuest then
 				QuestRemote:FireServer(targetQuest)
-			else
-				-- Fallback to the first available checked quest from the UI list
-				for qName, qData in pairs(selectedQuests) do
-					if qData.selected then
-						QuestRemote:FireServer(qName)
-						break
-					end
-				end
 			end
 		end
 	end
 
-	statusLabel.Text = "Status: Farming " .. targetModel.Name .. " (" .. targetLocation .. ")"
-
-	local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
-	if not targetRoot then 
-		isTargetInRange = false
-		return 
-	end
+	statusLabel.Text = "Status: Farming " .. targetModel.Name
 
 	setNoclip(char, true)
 	hrp.AssemblyLinearVelocity = Vector3.zero
@@ -765,21 +806,11 @@ RunService.RenderStepped:Connect(function()
 	local baseCF = CFrame.new(predictedTargetPos, predictedTargetPos + targetRoot.CFrame.LookVector)
 	local behindPos = baseCF.Position - baseCF.LookVector * dynamicDistance + Vector3.new(0, dynamicHeight, 0)
 	local lookTarget = predictedTargetPos + Vector3.new(0, targetRoot.Size.Y * 0.5, 0)
-	local finalCF = CFrame.lookAt(behindPos, lookTarget)
+	
+	-- Instant frame-perfect lock
+	hrp.CFrame = CFrame.lookAt(behindPos, lookTarget)
 
-	if currentTween then currentTween:Cancel() end
-	currentTween = TweenService:Create(
-		hrp,
-		TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Linear),
-		{ CFrame = finalCF }
-	)
-	currentTween:Play()
-
-	local distanceToTarget = (hrp.Position - targetRoot.Position).Magnitude
-	if distanceToTarget <= ATTACK_RANGE_THRESHOLD then
-		isTargetInRange = true
-		if CombatRemote then CombatRemote:FireServer() end
-	else
-		isTargetInRange = false
+	if CombatRemote then
+		CombatRemote:FireServer()
 	end
 end)
