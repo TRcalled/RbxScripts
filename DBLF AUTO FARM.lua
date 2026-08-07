@@ -59,7 +59,7 @@ local lastQuestAttempt = 0
 
 local BEHIND_DISTANCE = 4.5
 local HEIGHT_OFFSET = 0.5
-local predictionLead = 0.15
+local predictionLead = 0
 local knockbackBuffer = 2.0
 
 local lastTargetPos = nil
