@@ -2,21 +2,22 @@
 local Ice = loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/Ice/refs/heads/main/Library.lua"))()
 
 --// Services Setup
-local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
 
 local player = Players.LocalPlayer
+local sessionStart = os.time()
 
 --// Window Creation
 local Window = Ice:CreateWindow({
-    Name = "🌊 ICE & SEA HUB",
+    Name = "🌊 ICE & SEA HUB | ENHANCED",
     LoadingTitle = "Ice & Sea Hub",
-    LoadingSubtitle = "Loaded with Ice UI Library",
+    LoadingSubtitle = "Optimized & Enhanced Edition",
     Theme = "Nord",
     ConfigurationSaving = {
         Enabled = false,
@@ -44,6 +45,7 @@ local TRANSFORM_LIST = {
 local selectedTargets = {}
 local selectedTransform = TRANSFORM_LIST[1] or ""
 
+-- Toggles & States
 local isFarming = false
 local isAutoCombo = false
 local isQuesting = false
@@ -51,16 +53,25 @@ local isWaveMode = false
 local isAutoTransform = false
 local isAutoAttackPlayers = false
 local isAntiAFK = true
+local isLowHPSafety = false
+local isFPSBooster = false
+
+-- Config Values
 local PLAYER_ATTACK_RADIUS = 14
-local isTargetInRange = false
-
-local mobIndex = 1
-local lastQuestAttempt = 0
-
+local attackDelay = 0.08 -- Rate limit combat remote (seconds)
+local lowHPThreshold = 25 -- Percent HP
 local BEHIND_DISTANCE = 4.5
 local HEIGHT_OFFSET = 0.5
 local predictionLead = 0
 local knockbackBuffer = 2.0
+
+-- Internal Trackers
+local mobIndex = 1
+local lastQuestAttempt = 0
+local lastAttackTime = 0
+local lastPlayerAttackTime = 0
+local lastTargetSwitchTime = 0
+local isSafetyRetreating = false
 
 local lastTargetPos = nil
 local lastTargetModel = nil
@@ -79,6 +90,35 @@ local QuestRemote = ReplicatedStorage
     :WaitForChild("giveQuests", 5)
 
 --// HELPER FUNCTIONS
+local function getCharacter()
+    local char = player.Character
+    if not char then return nil, nil, nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    return char, hum, hrp
+end
+
+local function setNoclip(char, state)
+    if not char then return end
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CanCollide = not state
+        end
+    end
+end
+
+local function resetCharacterState()
+    local char, hum, hrp = getCharacter()
+    if char then setNoclip(char, false) end
+    if hum then hum.AutoRotate = true end
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
+    lastTargetPos = nil
+    lastTargetModel = nil
+end
+
 local function getQuestForMob(mobName)
     if not mobName then return nil end
     if MOB_QUEST_MAP[mobName] then return MOB_QUEST_MAP[mobName] end
@@ -127,25 +167,6 @@ local function getAnyAliveTarget()
     return nil, nil
 end
 
-local function getActiveTargetArray()
-    return selectedTargets
-end
-
-local function getCharacter()
-    local char = player.Character
-    if not char then return nil, nil, nil end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    return char, hum, hrp
-end
-
-local function setNoclip(char, state)
-    if not char then return end
-    for _, v in ipairs(char:GetDescendants()) do
-        if v:IsA("BasePart") then v.CanCollide = not state end
-    end
-end
-
 local function getNearbyPlayer(myHrp, radius)
     if not myHrp then return nil end
     for _, p in ipairs(Players:GetPlayers()) do
@@ -182,7 +203,7 @@ local function getDiscoveredTargets()
     return options
 end
 
---// AUTO ANTI-AFK CONNECTION
+--// ANTI-AFK SYSTEM
 if getgenv().AntiAFKConnection then
     getgenv().AntiAFKConnection:Disconnect()
 end
@@ -191,11 +212,10 @@ getgenv().AntiAFKConnection = player.Idled:Connect(function()
     if isAntiAFK then
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
-        print("[Anti-AFK] Prevented idle kick at " .. os.date("%X"))
     end
 end)
 
---// AUTO COMBO LOGIC
+--// AUTO COMBO SYSTEM
 local KEY_MAP = {
     ["1"] = Enum.KeyCode.One, ["2"] = Enum.KeyCode.Two, ["3"] = Enum.KeyCode.Three,
     ["4"] = Enum.KeyCode.Four, ["5"] = Enum.KeyCode.Five, ["6"] = Enum.KeyCode.Six,
@@ -231,19 +251,6 @@ local function checkAndPress(contentText)
     end
 end
 
-local comboConnection
-local function bindComboPresser()
-    if comboConnection then comboConnection:Disconnect() comboConnection = nil end
-    local playerGui = player:FindFirstChild("PlayerGui")
-    local combatGui = playerGui and playerGui:FindFirstChild("CombatGui")
-    local pressHere = combatGui and combatGui:FindFirstChild("PressHere")
-    if not pressHere then return end
-    checkAndPress(pressHere.ContentText)
-    comboConnection = pressHere:GetPropertyChangedSignal("ContentText"):Connect(function()
-        checkAndPress(pressHere.ContentText)
-    end)
-end
-
 RunService.Heartbeat:Connect(function()
     if not isAutoCombo then return end
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -256,20 +263,35 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-task.spawn(function()
-    local playerGui = player:WaitForChild("PlayerGui")
-    playerGui.DescendantAdded:Connect(function(desc)
-        if desc.Name == "PressHere" or desc.Name == "CombatGui" then
-            task.defer(bindComboPresser)
+--// FPS BOOSTER FUNCTION
+local originalSettings = {}
+local function setFPSBooster(enable)
+    if enable then
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object:IsA("Decal") or object:IsA("Texture") then
+                object.Transparency = 1
+            elseif object:IsA("ParticleEmitter") or object:IsA("Trail") then
+                object.Enabled = false
+            end
         end
-    end)
-    bindComboPresser()
-end)
+        Lighting.GlobalShadows = false
+    else
+        for _, object in ipairs(workspace:GetDescendants()) do
+            if object:IsA("Decal") or object:IsA("Texture") then
+                object.Transparency = 0
+            elseif object:IsA("ParticleEmitter") or object:IsA("Trail") then
+                object.Enabled = true
+            end
+        end
+        Lighting.GlobalShadows = true
+    end
+end
 
 --// TAB CREATION
-local FarmTab = Window:CreateTab("Farm", 4483362458)
-local FormsTab = Window:CreateTab("Forms", 4483362458)
-local SettingsTab = Window:CreateTab("Settings", 4483362458)
+local FarmTab = Window:CreateTab("🌾 Farm", 4483362458)
+local CombatTab = Window:CreateTab("⚔️ Combat & Forms", 4483362458)
+local SafetyTab = Window:CreateTab("🛡️ Safety & Visuals", 4483362458)
+local SettingsTab = Window:CreateTab("⚙️ Settings", 4483362458)
 
 --// TAB 1: FARM CONTROLS
 
@@ -290,24 +312,6 @@ local TargetDropdown = FarmTab:CreateDropdown({
     end,
 })
 
--- Auto-refresh dropdown on workspace additions
-workspace.ChildAdded:Connect(function(child)
-    task.wait(0.5)
-    if TargetDropdown then
-        TargetDropdown:Refresh(getDiscoveredTargets())
-    end
-end)
-
-local bosses = workspace:FindFirstChild("Bosses")
-if bosses then
-    bosses.ChildAdded:Connect(function(child)
-        task.wait(0.5)
-        if TargetDropdown then
-            TargetDropdown:Refresh(getDiscoveredTargets())
-        end
-    end)
-end
-
 FarmTab:CreateButton({
     Name = "🔄 Refresh Targets List",
     Callback = function()
@@ -322,44 +326,20 @@ FarmTab:CreateToggle({
     Callback = function(Value)
         isFarming = Value
         if not isFarming then
-            local char = player.Character
-            if char then setNoclip(char, false) end
-            lastTargetPos = nil
-            lastTargetModel = nil
-            isTargetInRange = false
+            resetCharacterState()
         end
     end,
 })
 
-FarmTab:CreateToggle({
-    Name = "🥊 Auto Combo",
-    CurrentValue = false,
-    Flag = "AutoCombo",
+FarmTab:CreateSlider({
+    Name = "Attack Delay (Rate Limit)",
+    Range = {0.02, 0.3},
+    Increment = 0.01,
+    Suffix = "s",
+    CurrentValue = attackDelay,
+    Flag = "AttackDelay",
     Callback = function(Value)
-        isAutoCombo = Value
-        if isAutoCombo then
-            bindComboPresser()
-        else
-            lastPressedKeyText = ""
-        end
-    end,
-})
-
-FarmTab:CreateToggle({
-    Name = "🎯 Auto Attack Players (14 Studs)",
-    CurrentValue = false,
-    Flag = "AutoAttackPlayers",
-    Callback = function(Value)
-        isAutoAttackPlayers = Value
-    end,
-})
-
-FarmTab:CreateToggle({
-    Name = "🌊 Wave Mode",
-    CurrentValue = false,
-    Flag = "WaveMode",
-    Callback = function(Value)
-        isWaveMode = Value
+        attackDelay = Value
     end,
 })
 
@@ -372,9 +352,51 @@ FarmTab:CreateToggle({
     end,
 })
 
---// TAB 2: FORM CONTROLS
+FarmTab:CreateToggle({
+    Name = "🌊 Wave Mode",
+    CurrentValue = false,
+    Flag = "WaveMode",
+    Callback = function(Value)
+        isWaveMode = Value
+    end,
+})
 
-FormsTab:CreateDropdown({
+--// TAB 2: COMBAT & FORMS
+
+CombatTab:CreateToggle({
+    Name = "🥊 Auto Combo",
+    CurrentValue = false,
+    Flag = "AutoCombo",
+    Callback = function(Value)
+        isAutoCombo = Value
+        if not isAutoCombo then
+            lastPressedKeyText = ""
+        end
+    end,
+})
+
+CombatTab:CreateToggle({
+    Name = "🎯 Auto Attack Players",
+    CurrentValue = false,
+    Flag = "AutoAttackPlayers",
+    Callback = function(Value)
+        isAutoAttackPlayers = Value
+    end,
+})
+
+CombatTab:CreateSlider({
+    Name = "Auto Attack Player Range",
+    Range = {5, 50},
+    Increment = 1,
+    Suffix = " studs",
+    CurrentValue = PLAYER_ATTACK_RADIUS,
+    Flag = "PlayerAttackRadius",
+    Callback = function(Value)
+        PLAYER_ATTACK_RADIUS = Value
+    end,
+})
+
+CombatTab:CreateDropdown({
     Name = "Select Form",
     Options = TRANSFORM_LIST,
     CurrentOption = {TRANSFORM_LIST[1] or ""},
@@ -396,15 +418,13 @@ local function triggerTransform()
     if remote then remote:FireServer() end
 end
 
-FormsTab:CreateToggle({
+CombatTab:CreateToggle({
     Name = "⚡ Auto Transform",
     CurrentValue = false,
     Flag = "AutoTransform",
     Callback = function(Value)
         isAutoTransform = Value
-        if isAutoTransform then
-            triggerTransform()
-        end
+        if isAutoTransform then triggerTransform() end
     end,
 })
 
@@ -413,7 +433,7 @@ local function handleCharacterSpawn(char)
     char:WaitForChild("HumanoidRootPart", 10)
     char:WaitForChild("Humanoid", 10)
     task.spawn(function()
-        for i = 1, 5 do
+        for i = 1, 4 do
             if isAutoTransform then triggerTransform() end
             task.wait(0.6)
         end
@@ -423,31 +443,72 @@ end
 if player.Character then task.spawn(handleCharacterSpawn, player.Character) end
 player.CharacterAdded:Connect(handleCharacterSpawn)
 
---// TAB 3: SETTINGS CONTROLS & THEME SELECTOR
+--// TAB 3: SAFETY & VISUALS
+
+SafetyTab:CreateToggle({
+    Name = "🩹 Low HP Protection",
+    CurrentValue = false,
+    Flag = "LowHPSafety",
+    Callback = function(Value)
+        isLowHPSafety = Value
+    end,
+})
+
+SafetyTab:CreateSlider({
+    Name = "Low HP Threshold",
+    Range = {10, 50},
+    Increment = 5,
+    Suffix = "% HP",
+    CurrentValue = lowHPThreshold,
+    Flag = "LowHPThreshold",
+    Callback = function(Value)
+        lowHPThreshold = Value
+    end,
+})
+
+SafetyTab:CreateToggle({
+    Name = "🚀 FPS Booster / Potato Graphics",
+    CurrentValue = false,
+    Flag = "FPSBooster",
+    Callback = function(Value)
+        isFPSBooster = Value
+        setFPSBooster(Value)
+    end,
+})
+
+--// TAB 4: SETTINGS & THEMES
 
 local availableThemes = {}
-if Ice and type(Ice.Themes) == "table" then
-    for themeName, _ in pairs(Ice.Themes) do
+if Ice and type(Ice.GetThemes) == "function" then
+    availableThemes = Ice:GetThemes()
+elseif Ice and type(Ice.Theme) == "table" then
+    for themeName, _ in pairs(Ice.Theme) do
         table.insert(availableThemes, themeName)
     end
     table.sort(availableThemes)
 end
 
 if #availableThemes == 0 then
-    availableThemes = {"Ocean", "Default", "Amber", "Midnight", "Serenity", "Bloom", "DarkBlue", "Light"}
+    availableThemes = {
+        "Default", "Nord", "Ocean", "AmberGlow", "Amethyst", "Bloom", "Cappuccino",
+        "Crimson", "Cyberpunk", "DarkBlue", "Dracula", "Emerald", "Green", "Light",
+        "Monochrome", "OLEDDark", "RoseGold", "Serenity", "Synthwave", "TokyoNight"
+    }
 end
 
 SettingsTab:CreateDropdown({
     Name = "🎨 UI Theme Selector",
     Options = availableThemes,
-    CurrentOption = {"Ocean"},
+    CurrentOption = {"Nord"},
     MultipleOptions = false,
     Flag = "ThemeSelect",
     Callback = function(Option)
         local chosenTheme = type(Option) == "table" and Option[1] or Option
-        if not chosenTheme then return end
+        if not chosenTheme or chosenTheme == "" then return end
 
-        if Ice and type(Ice.ChangeTheme) == "function" then
+        if Window and type(Window.ChangeTheme) == "function" then
+            Window:ChangeTheme(chosenTheme)
+        elseif Ice and type(Ice.ChangeTheme) == "function" then
             Ice:ChangeTheme(chosenTheme)
         end
     end,
@@ -491,6 +552,11 @@ local StatusParagraph = SettingsTab:CreateParagraph({
     Content = "Idle"
 })
 
+local SessionParagraph = SettingsTab:CreateParagraph({
+    Title = "Session Runtime",
+    Content = "00h 00m 00s"
+})
+
 local lastStatusMessage = ""
 local function updateStatus(text)
     if lastStatusMessage ~= text then
@@ -499,15 +565,33 @@ local function updateStatus(text)
     end
 end
 
+-- Session Timer Updater
+task.spawn(function()
+    while task.wait(1) do
+        local elapsed = os.time() - sessionStart
+        local hours = math.floor(elapsed / 3600)
+        local mins = math.floor((elapsed % 3600) / 60)
+        local secs = elapsed % 60
+        SessionParagraph:Set({
+            Title = "Session Runtime",
+            Content = string.format("%02dh %02dm %02ds", hours, mins, secs)
+        })
+    end
+end)
+
 --// NEARBY PLAYER AUTO ATTACK LOOP
 RunService.RenderStepped:Connect(function()
     if not isAutoAttackPlayers then return end
+
+    local now = tick()
+    if (now - lastPlayerAttackTime) < attackDelay then return end
 
     local char, hum, hrp = getCharacter()
     if not char or not hum or not hrp then return end
 
     local nearbyChar, nearbyRoot = getNearbyPlayer(hrp, PLAYER_ATTACK_RADIUS)
     if nearbyChar and nearbyRoot then
+        lastPlayerAttackTime = now
         if CombatRemote then
             CombatRemote:FireServer()
         end
@@ -517,15 +601,29 @@ end)
 --// MAIN AUTO FARM RENDER LOOP
 RunService.RenderStepped:Connect(function()
     if not isFarming then 
-        isTargetInRange = false
         return 
     end
 
     local char, hum, hrp = getCharacter()
     if not char or not hum or not hrp then 
-        isTargetInRange = false
         return 
     end
+
+    -- LOW HP SAFETY CHECK
+    if isLowHPSafety and hum.Health > 0 then
+        local hpPercent = (hum.Health / hum.MaxHealth) * 100
+        if hpPercent <= lowHPThreshold then
+            isSafetyRetreating = true
+            updateStatus("⚠️ Low HP! Regenerating in safe zone...")
+            hrp.CFrame = hrp.CFrame + Vector3.new(0, 500, 0) -- Teleport safe in air
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            return
+        elseif hpPercent >= 80 and isSafetyRetreating then
+            isSafetyRetreating = false
+        end
+    end
+
+    if isSafetyRetreating then return end
 
     hum.AutoRotate = false
     local targetModel, targetLocation
@@ -534,16 +632,14 @@ RunService.RenderStepped:Connect(function()
         targetModel, targetLocation = getAnyAliveTarget()
         if not targetModel then
             updateStatus("Waiting for wave...")
-            lastTargetPos = nil
-            isTargetInRange = false
+            resetCharacterState()
             return
         end
     else
-        local activeTargets = getActiveTargetArray()
+        local activeTargets = selectedTargets
         if #activeTargets == 0 then
             updateStatus("No target selected")
-            lastTargetPos = nil
-            isTargetInRange = false
+            resetCharacterState()
             return
         end
 
@@ -552,11 +648,14 @@ RunService.RenderStepped:Connect(function()
         targetModel = findTargetModel(currentTargetData)
 
         if not isTargetAlive(targetModel) then
-            updateStatus("Searching " .. (currentTargetData and currentTargetData.name or "Target"))
-            mobIndex += 1
-            if mobIndex > #activeTargets then mobIndex = 1 end
-            lastTargetPos = nil
-            isTargetInRange = false
+            updateStatus("Searching Target...")
+            local now = tick()
+            if (now - lastTargetSwitchTime) >= 0.3 then -- Throttle target index switching
+                lastTargetSwitchTime = now
+                mobIndex += 1
+                if mobIndex > #activeTargets then mobIndex = 1 end
+            end
+            resetCharacterState()
             return
         end
         targetLocation = currentTargetData.location
@@ -564,11 +663,9 @@ RunService.RenderStepped:Connect(function()
 
     local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
     if not targetRoot then
-        isTargetInRange = false
+        resetCharacterState()
         return
     end
-
-    isTargetInRange = true
 
     -- CONTINUOUS AUTO-QUESTING (3s Cooldown)
     if isQuesting and QuestRemote then
@@ -613,7 +710,9 @@ RunService.RenderStepped:Connect(function()
     -- Instant frame-perfect lock
     hrp.CFrame = CFrame.lookAt(behindPos, lookTarget)
 
-    if CombatRemote then
+    -- Rate-limited Combat Remote Execution
+    if CombatRemote and (now - lastAttackTime) >= attackDelay then
+        lastAttackTime = now
         CombatRemote:FireServer()
     end
 end)
