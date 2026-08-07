@@ -98,23 +98,41 @@ local function getCharacter()
     return char, hum, hrp
 end
 
+-- FIXED NOCLIP: Protects accessories and HumanoidRootPart collisions when restoring
 local function setNoclip(char, state)
     if not char then return end
     for _, v in ipairs(char:GetDescendants()) do
         if v:IsA("BasePart") then
-            v.CanCollide = not state
+            if state then
+                v.CanCollide = false
+            else
+                local isAccessory = v:FindFirstAncestorOfClass("Accessory") ~= nil
+                if v.Name == "HumanoidRootPart" or isAccessory then
+                    v.CanCollide = false
+                else
+                    v.CanCollide = true
+                end
+            end
         end
     end
 end
 
+-- FIXED RESET: Restores full physics control and clears retreat states
 local function resetCharacterState()
     local char, hum, hrp = getCharacter()
-    if char then setNoclip(char, false) end
-    if hum then hum.AutoRotate = true end
+    if char then 
+        setNoclip(char, false) 
+    end
+    if hum then 
+        hum.AutoRotate = true 
+        hum.PlatformStand = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
     if hrp then
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
     end
+    isSafetyRetreating = false
     lastTargetPos = nil
     lastTargetModel = nil
 end
