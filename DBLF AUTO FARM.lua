@@ -1,5 +1,5 @@
 --// Ice UI Library Load
-local Ice = loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/Ice/refs/heads/main/Library.lua"))()
+local Ice = loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/Ice/main/Library.lua"))()
 
 --// Services Setup
 local Players = game:GetService("Players")
