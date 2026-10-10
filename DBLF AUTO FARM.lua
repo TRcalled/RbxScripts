@@ -56,7 +56,7 @@ local isLowHPSafety = false
 local isFPSBooster = false
 
 local PLAYER_ATTACK_RADIUS = 14
-local attackDelay = 0.08 -- kept for UI only (combat is no longer limited)
+local attackDelay = 0.08
 local lowHPThreshold = 25
 local BEHIND_DISTANCE = 4.5
 local HEIGHT_OFFSET = 0.5
@@ -114,32 +114,26 @@ local function resetCharacterState()
     local char, hum, hrp = getCharacter()
     if not char or not hum or not hrp then return end
 
-    -- Restore collisions properly
     setNoclip(char, false)
 
-    -- Clear all velocities hard
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     hrp.Anchored = false
 
-    -- Force humanoid out of any weird state
     hum.AutoRotate = true
     hum.PlatformStand = false
     hum.Sit = false
 
-    -- Strong state reset (this is the important part)
     hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    task.wait() -- tiny yield so the state can apply
+    task.wait()
     hum:ChangeState(Enum.HumanoidStateType.Running)
 
-    -- Extra safety: clear any body movers if they somehow exist
     for _, v in ipairs(hrp:GetChildren()) do
         if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
             v:Destroy()
         end
     end
 
-    -- Reset trackers
     isSafetyRetreating = false
     lastTargetPos = nil
     lastTargetModel = nil
@@ -338,7 +332,6 @@ FarmTab:CreateToggle({
         isFarming = Value
         if not isFarming then
             resetCharacterState()
-            -- Delayed second reset (very effective against wonky physics)
             task.delay(0.15, function()
                 if not isFarming then
                     resetCharacterState()
@@ -349,7 +342,7 @@ FarmTab:CreateToggle({
 })
 
 FarmTab:CreateSlider({
-    Name = "Attack Delay (UI only - Combat is unlimited)",
+    Name = "Attack Delay (UI only)",
     Range = {0.02, 0.3},
     Increment = 0.01,
     Suffix = "s",
@@ -592,7 +585,7 @@ end)
 
 --// ==================== LOOPS ====================
 
--- Auto Combo (Heartbeat)
+-- Auto Combo
 RunService.Heartbeat:Connect(function()
     if not isAutoCombo then return end
     local playerGui = player:FindFirstChild("PlayerGui")
@@ -605,7 +598,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Auto Attack Players + Main Farm (single Heartbeat for better performance)
+-- Main Loop (Players + Farm)
 RunService.Heartbeat:Connect(function()
     local char, hum, hrp = getCharacter()
     if not char or not hum or not hrp then return end
@@ -637,21 +630,19 @@ RunService.Heartbeat:Connect(function()
 
     if isSafetyRetreating then return end
 
-    hum.AutoRotate = false
+    -- ===== FIND TARGET FIRST (important) =====
+    local targetModel
 
-    local targetModel, targetLocation
     if isWaveMode then
-        targetModel, targetLocation = getAnyAliveTarget()
+        targetModel = getAnyAliveTarget()
         if not targetModel then
             updateStatus("Waiting for wave...")
-            resetCharacterState()
-            return
+            return  -- clean return, no reset spam
         end
     else
         if #selectedTargets == 0 then
             updateStatus("No target selected")
-            resetCharacterState()
-            return
+            return  -- clean return
         end
 
         if mobIndex > #selectedTargets then mobIndex = 1 end
@@ -666,17 +657,18 @@ RunService.Heartbeat:Connect(function()
                 mobIndex += 1
                 if mobIndex > #selectedTargets then mobIndex = 1 end
             end
-            resetCharacterState()
-            return
+            return  -- clean return, no reset spam
         end
-        targetLocation = currentTargetData.location
     end
 
     local targetRoot = targetModel:FindFirstChild("HumanoidRootPart")
-    if not targetRoot then
-        resetCharacterState()
-        return
-    end
+    if not targetRoot then return end
+
+    -- ===== ONLY REACH HERE IF WE HAVE A REAL TARGET =====
+    hum.AutoRotate = false
+    setNoclip(char, true)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
 
     -- Auto Quest
     if isQuesting and QuestRemote then
@@ -691,10 +683,8 @@ RunService.Heartbeat:Connect(function()
     end
 
     updateStatus("Farming " .. targetModel.Name)
-    setNoclip(char, true)
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
 
+    -- Prediction
     local now = tick()
     local calcVel = Vector3.zero
     if lastTargetPos and lastTargetModel == targetModel and lastTargetTime then
@@ -721,7 +711,7 @@ RunService.Heartbeat:Connect(function()
 
     hrp.CFrame = CFrame.lookAt(behindPos, lookTarget)
 
-    -- Combat (unlimited - every Heartbeat)
+    -- Combat (unlimited)
     if CombatRemote then
         CombatRemote:FireServer()
     end
