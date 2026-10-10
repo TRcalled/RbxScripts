@@ -1,7 +1,7 @@
 --// Ice UI Library Load
 local Ice = loadstring(game:HttpGet("https://raw.githubusercontent.com/TRcalled/Ice/main/Library.lua"))()
 
---// Services Setup
+--// Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,7 +13,7 @@ local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local sessionStart = os.time()
 
---// Window Creation
+--// Window
 local Window = Ice:CreateWindow({
     Name = "🌊 ICE & SEA HUB | ENHANCED",
     LoadingTitle = "Ice & Sea Hub",
@@ -25,7 +25,7 @@ local Window = Ice:CreateWindow({
     }
 })
 
---// DATA TABLES & CONFIGS
+--// DATA
 local MOB_QUEST_MAP = {
     ["Goku"] = "VegetaGokuQuestFirstTime",
     ["VegetaGoku"] = "VegetaGokuQuestFirstTime",
@@ -41,11 +41,10 @@ local TRANSFORM_LIST = {
     "SSJRUSV", "SSJRage", "SUPERKAIOKEN", "UI", "ULTRAEGO"
 }
 
---// LOGIC VARIABLES
+--// STATES
 local selectedTargets = {}
 local selectedTransform = TRANSFORM_LIST[1] or ""
 
--- Toggles & States
 local isFarming = false
 local isAutoCombo = false
 local isQuesting = false
@@ -56,29 +55,24 @@ local isAntiAFK = true
 local isLowHPSafety = false
 local isFPSBooster = false
 
--- Config Values
 local PLAYER_ATTACK_RADIUS = 14
-local attackDelay = 0.08 -- Rate limit combat remote (seconds)
-local lowHPThreshold = 25 -- Percent HP
+local attackDelay = 0.08 -- kept for UI only (combat is no longer limited)
+local lowHPThreshold = 25
 local BEHIND_DISTANCE = 4.5
 local HEIGHT_OFFSET = 0.5
 local predictionLead = 0
 local knockbackBuffer = 2.0
 
--- Internal Trackers
 local mobIndex = 1
 local lastQuestAttempt = 0
-local lastAttackTime = 0
-local lastPlayerAttackTime = 0
 local lastTargetSwitchTime = 0
 local isSafetyRetreating = false
-
 local lastTargetPos = nil
 local lastTargetModel = nil
 local lastTargetTime = nil
 local lastPressedKeyText = ""
 
---// REMOTES SETUP
+--// REMOTES
 local CombatRemote = ReplicatedStorage
     :WaitForChild("Assets", 5)
     :WaitForChild("CombatAssets", 5)
@@ -89,7 +83,7 @@ local QuestRemote = ReplicatedStorage
     :WaitForChild("Remotes", 5)
     :WaitForChild("giveQuests", 5)
 
---// HELPER FUNCTIONS
+--// HELPERS
 local function getCharacter()
     local char = player.Character
     if not char then return nil, nil, nil end
@@ -98,7 +92,6 @@ local function getCharacter()
     return char, hum, hrp
 end
 
--- FIXED NOCLIP: Protects accessories and HumanoidRootPart collisions when restoring
 local function setNoclip(char, state)
     if not char then return end
     for _, v in ipairs(char:GetDescendants()) do
@@ -117,24 +110,40 @@ local function setNoclip(char, state)
     end
 end
 
--- FIXED RESET: Restores full physics control and clears retreat states
 local function resetCharacterState()
     local char, hum, hrp = getCharacter()
-    if char then 
-        setNoclip(char, false) 
+    if not char or not hum or not hrp then return end
+
+    -- Restore collisions properly
+    setNoclip(char, false)
+
+    -- Clear all velocities hard
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    hrp.Anchored = false
+
+    -- Force humanoid out of any weird state
+    hum.AutoRotate = true
+    hum.PlatformStand = false
+    hum.Sit = false
+
+    -- Strong state reset (this is the important part)
+    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    task.wait() -- tiny yield so the state can apply
+    hum:ChangeState(Enum.HumanoidStateType.Running)
+
+    -- Extra safety: clear any body movers if they somehow exist
+    for _, v in ipairs(hrp:GetChildren()) do
+        if v:IsA("BodyVelocity") or v:IsA("BodyAngularVelocity") or v:IsA("BodyPosition") or v:IsA("BodyGyro") then
+            v:Destroy()
+        end
     end
-    if hum then 
-        hum.AutoRotate = true 
-        hum.PlatformStand = false
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-    if hrp then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end
+
+    -- Reset trackers
     isSafetyRetreating = false
     lastTargetPos = nil
     lastTargetModel = nil
+    lastTargetTime = nil
 end
 
 local function getQuestForMob(mobName)
@@ -193,14 +202,13 @@ local function getNearbyPlayer(myHrp, radius)
             local pHum = pChar:FindFirstChildOfClass("Humanoid")
             local pRoot = pChar:FindFirstChild("HumanoidRootPart")
             if pHum and pHum.Health > 0 and pRoot then
-                local dist = (myHrp.Position - pRoot.Position).Magnitude
-                if dist <= radius then
-                    return pChar, pRoot, dist
+                if (myHrp.Position - pRoot.Position).Magnitude <= radius then
+                    return pChar, pRoot
                 end
             end
         end
     end
-    return nil, nil, nil
+    return nil, nil
 end
 
 local function getDiscoveredTargets()
@@ -221,11 +229,10 @@ local function getDiscoveredTargets()
     return options
 end
 
---// ANTI-AFK SYSTEM
+--// ANTI-AFK
 if getgenv().AntiAFKConnection then
     getgenv().AntiAFKConnection:Disconnect()
 end
-
 getgenv().AntiAFKConnection = player.Idled:Connect(function()
     if isAntiAFK then
         VirtualUser:CaptureController()
@@ -233,7 +240,7 @@ getgenv().AntiAFKConnection = player.Idled:Connect(function()
     end
 end)
 
---// AUTO COMBO SYSTEM
+--// AUTO COMBO
 local KEY_MAP = {
     ["1"] = Enum.KeyCode.One, ["2"] = Enum.KeyCode.Two, ["3"] = Enum.KeyCode.Three,
     ["4"] = Enum.KeyCode.Four, ["5"] = Enum.KeyCode.Five, ["6"] = Enum.KeyCode.Six,
@@ -257,9 +264,9 @@ local function fireKey(keyCode)
 end
 
 local function checkAndPress(contentText)
-    if not isAutoCombo or not contentText or contentText == "" then 
+    if not isAutoCombo or not contentText or contentText == "" then
         lastPressedKeyText = ""
-        return 
+        return
     end
     if lastPressedKeyText == contentText then return end
     local keyCode = getKeyCodeFromText(contentText)
@@ -269,20 +276,7 @@ local function checkAndPress(contentText)
     end
 end
 
-RunService.Heartbeat:Connect(function()
-    if not isAutoCombo then return end
-    local playerGui = player:FindFirstChild("PlayerGui")
-    local combatGui = playerGui and playerGui:FindFirstChild("CombatGui")
-    local pressHere = combatGui and combatGui:FindFirstChild("PressHere")
-    if pressHere and pressHere.ContentText ~= "" then
-        checkAndPress(pressHere.ContentText)
-    else
-        lastPressedKeyText = ""
-    end
-end)
-
---// FPS BOOSTER FUNCTION
-local originalSettings = {}
+--// FPS BOOSTER
 local function setFPSBooster(enable)
     if enable then
         for _, object in ipairs(workspace:GetDescendants()) do
@@ -305,14 +299,13 @@ local function setFPSBooster(enable)
     end
 end
 
---// TAB CREATION
+--// TABS
 local FarmTab = Window:CreateTab("🌾 Farm", 4483362458)
 local CombatTab = Window:CreateTab("⚔️ Combat & Forms", 4483362458)
 local SafetyTab = Window:CreateTab("🛡️ Safety & Visuals", 4483362458)
 local SettingsTab = Window:CreateTab("⚙️ Settings", 4483362458)
 
---// TAB 1: FARM CONTROLS
-
+--// FARM TAB
 local TargetDropdown = FarmTab:CreateDropdown({
     Name = "Select Targets",
     Options = getDiscoveredTargets(),
@@ -345,12 +338,18 @@ FarmTab:CreateToggle({
         isFarming = Value
         if not isFarming then
             resetCharacterState()
+            -- Delayed second reset (very effective against wonky physics)
+            task.delay(0.15, function()
+                if not isFarming then
+                    resetCharacterState()
+                end
+            end)
         end
     end,
 })
 
 FarmTab:CreateSlider({
-    Name = "Attack Delay (Rate Limit)",
+    Name = "Attack Delay (UI only - Combat is unlimited)",
     Range = {0.02, 0.3},
     Increment = 0.01,
     Suffix = "s",
@@ -379,8 +378,7 @@ FarmTab:CreateToggle({
     end,
 })
 
---// TAB 2: COMBAT & FORMS
-
+--// COMBAT TAB
 CombatTab:CreateToggle({
     Name = "🥊 Auto Combo",
     CurrentValue = false,
@@ -461,8 +459,7 @@ end
 if player.Character then task.spawn(handleCharacterSpawn, player.Character) end
 player.CharacterAdded:Connect(handleCharacterSpawn)
 
---// TAB 3: SAFETY & VISUALS
-
+--// SAFETY TAB
 SafetyTab:CreateToggle({
     Name = "🩹 Low HP Protection",
     CurrentValue = false,
@@ -494,8 +491,7 @@ SafetyTab:CreateToggle({
     end,
 })
 
---// TAB 4: SETTINGS & THEMES
-
+--// SETTINGS TAB
 local availableThemes = {}
 if Ice and type(Ice.GetThemes) == "function" then
     availableThemes = Ice:GetThemes()
@@ -505,7 +501,6 @@ elseif Ice and type(Ice.Theme) == "table" then
     end
     table.sort(availableThemes)
 end
-
 if #availableThemes == 0 then
     availableThemes = {
         "Default", "Nord", "Ocean", "AmberGlow", "Amethyst", "Bloom", "Cappuccino",
@@ -523,7 +518,6 @@ SettingsTab:CreateDropdown({
     Callback = function(Option)
         local chosenTheme = type(Option) == "table" and Option[1] or Option
         if not chosenTheme or chosenTheme == "" then return end
-
         if Window and type(Window.ChangeTheme) == "function" then
             Window:ChangeTheme(chosenTheme)
         elseif Ice and type(Ice.ChangeTheme) == "function" then
@@ -583,7 +577,6 @@ local function updateStatus(text)
     end
 end
 
--- Session Timer Updater
 task.spawn(function()
     while task.wait(1) do
         local elapsed = os.time() - sessionStart
@@ -597,43 +590,44 @@ task.spawn(function()
     end
 end)
 
---// NEARBY PLAYER AUTO ATTACK LOOP
-RunService.RenderStepped:Connect(function()
-    if not isAutoAttackPlayers then return end
+--// ==================== LOOPS ====================
 
-    local now = tick()
-    if (now - lastPlayerAttackTime) < attackDelay then return end
-
-    local char, hum, hrp = getCharacter()
-    if not char or not hum or not hrp then return end
-
-    local nearbyChar, nearbyRoot = getNearbyPlayer(hrp, PLAYER_ATTACK_RADIUS)
-    if nearbyChar and nearbyRoot then
-        lastPlayerAttackTime = now
-        if CombatRemote then
-            CombatRemote:FireServer()
-        end
+-- Auto Combo (Heartbeat)
+RunService.Heartbeat:Connect(function()
+    if not isAutoCombo then return end
+    local playerGui = player:FindFirstChild("PlayerGui")
+    local combatGui = playerGui and playerGui:FindFirstChild("CombatGui")
+    local pressHere = combatGui and combatGui:FindFirstChild("PressHere")
+    if pressHere and pressHere.ContentText ~= "" then
+        checkAndPress(pressHere.ContentText)
+    else
+        lastPressedKeyText = ""
     end
 end)
 
---// MAIN AUTO FARM RENDER LOOP
-RunService.RenderStepped:Connect(function()
-    if not isFarming then 
-        return 
-    end
-
+-- Auto Attack Players + Main Farm (single Heartbeat for better performance)
+RunService.Heartbeat:Connect(function()
     local char, hum, hrp = getCharacter()
-    if not char or not hum or not hrp then 
-        return 
+    if not char or not hum or not hrp then return end
+
+    -- Auto Attack Players (unlimited)
+    if isAutoAttackPlayers then
+        local nearbyChar = getNearbyPlayer(hrp, PLAYER_ATTACK_RADIUS)
+        if nearbyChar and CombatRemote then
+            CombatRemote:FireServer()
+        end
     end
 
-    -- LOW HP SAFETY CHECK
+    -- Auto Farm
+    if not isFarming then return end
+
+    -- Low HP Safety
     if isLowHPSafety and hum.Health > 0 then
         local hpPercent = (hum.Health / hum.MaxHealth) * 100
         if hpPercent <= lowHPThreshold then
             isSafetyRetreating = true
             updateStatus("⚠️ Low HP! Regenerating in safe zone...")
-            hrp.CFrame = hrp.CFrame + Vector3.new(0, 500, 0) -- Teleport safe in air
+            hrp.CFrame = hrp.CFrame + Vector3.new(0, 500, 0)
             hrp.AssemblyLinearVelocity = Vector3.zero
             return
         elseif hpPercent >= 80 and isSafetyRetreating then
@@ -644,8 +638,8 @@ RunService.RenderStepped:Connect(function()
     if isSafetyRetreating then return end
 
     hum.AutoRotate = false
-    local targetModel, targetLocation
 
+    local targetModel, targetLocation
     if isWaveMode then
         targetModel, targetLocation = getAnyAliveTarget()
         if not targetModel then
@@ -654,24 +648,23 @@ RunService.RenderStepped:Connect(function()
             return
         end
     else
-        local activeTargets = selectedTargets
-        if #activeTargets == 0 then
+        if #selectedTargets == 0 then
             updateStatus("No target selected")
             resetCharacterState()
             return
         end
 
-        if mobIndex > #activeTargets then mobIndex = 1 end
-        local currentTargetData = activeTargets[mobIndex]
+        if mobIndex > #selectedTargets then mobIndex = 1 end
+        local currentTargetData = selectedTargets[mobIndex]
         targetModel = findTargetModel(currentTargetData)
 
         if not isTargetAlive(targetModel) then
             updateStatus("Searching Target...")
             local now = tick()
-            if (now - lastTargetSwitchTime) >= 0.3 then -- Throttle target index switching
+            if (now - lastTargetSwitchTime) >= 0.3 then
                 lastTargetSwitchTime = now
                 mobIndex += 1
-                if mobIndex > #activeTargets then mobIndex = 1 end
+                if mobIndex > #selectedTargets then mobIndex = 1 end
             end
             resetCharacterState()
             return
@@ -685,7 +678,7 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    -- CONTINUOUS AUTO-QUESTING (3s Cooldown)
+    -- Auto Quest
     if isQuesting and QuestRemote then
         local now = tick()
         if (now - lastQuestAttempt) >= 3 then
@@ -698,7 +691,6 @@ RunService.RenderStepped:Connect(function()
     end
 
     updateStatus("Farming " .. targetModel.Name)
-
     setNoclip(char, true)
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
@@ -707,7 +699,9 @@ RunService.RenderStepped:Connect(function()
     local calcVel = Vector3.zero
     if lastTargetPos and lastTargetModel == targetModel and lastTargetTime then
         local dt = now - lastTargetTime
-        if dt > 0 then calcVel = (targetRoot.Position - lastTargetPos) / dt end
+        if dt > 0 then
+            calcVel = (targetRoot.Position - lastTargetPos) / dt
+        end
     end
 
     lastTargetPos = targetRoot.Position
@@ -724,13 +718,11 @@ RunService.RenderStepped:Connect(function()
     local baseCF = CFrame.new(predictedTargetPos, predictedTargetPos + targetRoot.CFrame.LookVector)
     local behindPos = baseCF.Position - baseCF.LookVector * dynamicDistance + Vector3.new(0, dynamicHeight, 0)
     local lookTarget = predictedTargetPos + Vector3.new(0, targetRoot.Size.Y * 0.5, 0)
-    
-    -- Instant frame-perfect lock
+
     hrp.CFrame = CFrame.lookAt(behindPos, lookTarget)
 
-    -- Rate-limited Combat Remote Execution
-    if CombatRemote and (now - lastAttackTime) >= attackDelay then
-        lastAttackTime = now
+    -- Combat (unlimited - every Heartbeat)
+    if CombatRemote then
         CombatRemote:FireServer()
     end
 end)
