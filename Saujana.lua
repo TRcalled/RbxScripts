@@ -1,5 +1,4 @@
-
-local SCRIPT_VERSION = "2.2.1"
+local SCRIPT_VERSION = "2.2.2"
 
 -- Wait for the game to fully load (Crucial for auto-execution)
 if not game:IsLoaded() then
@@ -171,6 +170,21 @@ local function getRodSkinConfig()
     return rsc
 end
 
+-- ==================== WEBHOOK URL HELPERS & ENV READ ====================
+local function trimString(s)
+    if type(s) ~= "string" then return "" end
+    return string.match(s, "^%s*(.-)%s*$") or ""
+end
+
+local function isValidWebhookUrl(url)
+    local clean = trimString(url)
+    return string.match(clean, "^https?://[%w%.%-]+/api/webhooks/") ~= nil
+end
+
+local envWebhookRaw = (type(getgenv) == "function" and getgenv().AutoFishWebhook) or ""
+local envWebhookUrl = trimString(envWebhookRaw)
+local envWebhookValid = isValidWebhookUrl(envWebhookUrl)
+
 -- ==================== CACHED REFERENCES & STATE ====================
 local CastRemote, ReelRemote, SellAll, SetAutoRemote, GetStateRemote, ServerRemote
 local cachedFishingFrame, cachedInfoLabel, cachedTapBtn, cachedTapText, cachedBarFill, cachedAutoFishingButton
@@ -251,11 +265,11 @@ local sellInterval = 20
 local castPos = (typeof(vector) == "table" and vector.create) and vector.create(0, 0, 0) or Vector3.new(0, 0, 0)
 local castPower = 1
 
--- Discord Webhook state
+-- Discord Webhook state (auto-reads getgenv().AutoFishWebhook if valid)
 local webhookState = {
     Active = true,
-    Enabled = false,
-    Url = "",
+    Enabled = envWebhookValid,
+    Url = envWebhookValid and envWebhookUrl or "",
     NotifyRareCatches = true,
     PeriodicReport = true,
     AlertOnIssues = true,
@@ -800,16 +814,6 @@ local function getAllHttpRequestFuncs()
     return list
 end
 
-local function trimString(s)
-    if type(s) ~= "string" then return "" end
-    return string.match(s, "^%s*(.-)%s*$") or ""
-end
-
-local function isValidWebhookUrl(url)
-    local clean = trimString(url)
-    return string.match(clean, "^https?://[%w%.%-]+/api/webhooks/") ~= nil
-end
-
 local function extractHttpStatus(res)
     if type(res) ~= "table" then return 0, "Non-table response" end
     local raw = res.StatusCode or res.status_code or res.statusCode or res.Status or res.status or res.code or res.Code
@@ -873,7 +877,6 @@ local function sendWebhookPayloadNow(payload)
         return false, "JSON encode failed"
     end
 
-    -- Build candidate URLs (?wait=true fixes executors that report StatusCode=0 on empty 204 responses)
     local urlsToTry = { cleanUrl }
     if (string.find(cleanUrl, "discord.com/api/webhooks/", 1, true) or string.find(cleanUrl, "discordapp.com/api/webhooks/", 1, true))
         and not string.find(cleanUrl, "wait=", 1, true) then
@@ -2553,7 +2556,7 @@ WebhookTab:CreateSection({ name = "Discord Configuration" })
 
 WebhookTab:CreateInput({
     name = "Discord Webhook URL",
-    value = "",
+    value = webhookState.Url,
     placeholder = "https://discord.com/api/webhooks/...",
     flag = "DiscordWebhookUrl",
     callback = function(text)
@@ -2563,9 +2566,9 @@ WebhookTab:CreateInput({
 
 WebhookTab:CreateToggle({
     name = "Enable Discord Webhook",
-    description = "Sends catches & stats asynchronously with rate-limit protection",
+    description = "Auto-enables if getgenv().AutoFishWebhook is set",
     flag = "EnableDiscordWebhook",
-    value = false,
+    value = webhookState.Enabled,
     callback = function(value)
         webhookState.Enabled = value
         if value then
@@ -3033,12 +3036,15 @@ task.defer(function()
     end
 end)
 
-print(string.format("[Auto Fish v%s] Ready: Fast Safe Reel, Ping Auto-Tune, Universal Rod, Rate Monitor & Discord Webhook.", SCRIPT_VERSION))
+print(string.format("[Auto Fish v%s] Ready: Fast Safe Reel, Ping Auto-Tune, Universal Rod, Rate Monitor & Webhook.", SCRIPT_VERSION))
 
 task.defer(function()
     Window:Notify({
         title = "Auto Fish v" .. SCRIPT_VERSION,
-        content = "Happy Fishing!",
+        content = webhookState.Enabled
+            and "Fast Safe Reel + Rate Monitor + Webhook Active"
+            or "Fast Safe Reel + Rate Monitor Active",
         duration = 4,
     })
 end)
+
