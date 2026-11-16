@@ -61,7 +61,9 @@ end)
 -- ==================== ENVIRONMENT CONFIG ====================
 local TARGET_PLACE_ID = 89346234653070
 if game.PlaceId ~= TARGET_PLACE_ID then
-    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d", TARGET_PLACE_ID, game.PlaceId))
+    AntiAFKState.Active = false
+    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d — aborting load.", TARGET_PLACE_ID, game.PlaceId))
+    return
 end
 
 -- Load Rayfield safely
