@@ -58,19 +58,9 @@ task.spawn(function()
     print("[Anti-AFK] Worker thread safely exited.")
 end)
 -- ==================== ENVIRONMENT CONFIG ====================
-local ALLOWED_PLACE_IDS = {
-    [89346234653070] = true,
-}
-
-if not ALLOWED_PLACE_IDS[game.PlaceId] then
-    local rs = game:GetService("ReplicatedStorage")
-    if not rs:WaitForChild("FishRemotes", 2) then
-        AntiAFKState.Active = false
-        warn(string.format("[Auto Fish] Unsupported game (PlaceId %d, no FishRemotes) — aborting load.", game.PlaceId))
-        return
-    else
-        warn(string.format("[Auto Fish] Different PlaceId (%d) detected — FishRemotes found, continuing load.", game.PlaceId))
-    end
+local TARGET_PLACE_ID = 89346234653070
+if game.PlaceId ~= TARGET_PLACE_ID then
+    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d", TARGET_PLACE_ID, game.PlaceId))
 end
 
 -- Load Rayfield safely
@@ -78,7 +68,6 @@ local ok, Rayfield = pcall(function()
     return loadstring(game:HttpGet("https://sirius.menu/gen2"))()
 end)
 if not ok or not Rayfield then
-    AntiAFKState.Active = false
     warn("[Auto Fish] Rayfield failed to load:", Rayfield)
     return
 end
