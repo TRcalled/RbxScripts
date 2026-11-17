@@ -1,12 +1,12 @@
--- Saujana Auto Fish | Version 2.4.1 local SCRIPT_VERSION = "2.4.1"
+-- Saujana Auto Fish | Version 2.4.1
+local SCRIPT_VERSION = "2.4.1"
 
 if not game:IsLoaded() then
     game.Loaded:Wait() 
 end
 
 local TARGET_PLACE_ID = 89346234653070 if game.PlaceId ~= TARGET_PLACE_ID then
-    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d —
-aborting.", TARGET_PLACE_ID, game.PlaceId)) return 
+    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d — aborting.", TARGET_PLACE_ID, game.PlaceId)) return 
 end
 
 print(string.format("========== AUTO FISH v%s STARTING ==========",
@@ -17,7 +17,7 @@ if getgenv()._AutoFishCleanup then
     print("[Auto Fish] Cleaned up previous script instance.") 
 end
 
--- ==================== SERVICES & CORE ==================== 
+-- ==================== SERVICES & CORE ====================
 local Svc = {
 Players = game:GetService("Players"), VirtualUser =
 game:GetService("VirtualUser"), ReplicatedStorage =
@@ -31,7 +31,8 @@ local LocalPlayer = Svc.Players.LocalPlayer while not LocalPlayer do
     LocalPlayer = Svc.Players.LocalPlayer 
 end
 
--- ==================== ANTI-AFK MODULE ==================== if
+-- ==================== ANTI-AFK MODULE ====================
+if
 getgenv()._AntiAFKState then
     getgenv()._AntiAFKState.Active = false 
 end
@@ -52,8 +53,7 @@ else
 end
 end
 
-task.spawn(function() print(string.format("[Anti-AFK] Initialized: Proactive
-keep-alive active (every %d seconds).", AntiAFKState.Interval)) while
+task.spawn(function() print(string.format("[Anti-AFK] Initialized: Proactive keep-alive active (every %d seconds).", AntiAFKState.Interval)) while
 AntiAFKState.Active do
     task.wait(AntiAFKState.Interval) if not
     AntiAFKState.Active then
@@ -65,7 +65,8 @@ print("[Anti-AFK] Worker thread safely exited.")
 end
 )
 
--- ==================== LOAD RAYFIELD ==================== local ok, Rayfield
+-- ==================== LOAD RAYFIELD ====================
+local ok, Rayfield
 for attempt = 1, 3 do
     ok, Rayfield = pcall(function() return
     loadstring(game:HttpGet("https://sirius.menu/gen2"))() 
@@ -78,13 +79,13 @@ warn(string.format("[Auto Fish] Rayfield attempt %d failed: %s",
 attempt, tostring(Rayfield))) task.wait(2) 
 end
 if not ok or not Rayfield then
-    AntiAFKState.Active = false warn("[Auto Fish] Rayfield failed to load after 3
-attempts.") return 
+    AntiAFKState.Active = false warn("[Auto Fish] Rayfield failed to load after 3 attempts.") return 
 end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
--- ==================== CONSTANTS & CONFIG LOADERS ==================== local
+-- ==================== CONSTANTS & CONFIG LOADERS ====================
+local
 CONST = { DEFAULT_MINIGAME = { StartingProgress = 0.4, MinSecondsPerTap = 0.06,
 AutoSecondsPerTap = 0.1, AutoExtraTaps = 2, CastCooldown = 0.6, },
 DEFAULT_FISH_XP = { Common = 5, Uncommon = 8, Rare = 15, Epic = 30, Mythic
@@ -95,13 +96,14 @@ NOTIFY_RARITIES = { Mythic = true, Secret = true, Supremacy = true, Primordial =
 true }, CLOSE_KEYWORDS = { "close", "ok", "okay", "claim", "continue",
 "confirm", "dismiss", "exit", "skip", "done" }, PRIMORDIAL_ORDER = {
 "SoreKraken", "Thalvyra", "Celestra" }, PRIMORDIAL_SPOTS = { SoreKraken = { Key
-= "SoreKraken", Name = "Sore Kraken", Priority = 3, -- Hardest / Rarest
-(Difficulty 0.3012) Difficulty = 0.3012, CfgFunc = "soreKraken", StateName =
+= "SoreKraken", Name = "Sore Kraken", Priority = 3, -- Hardest / Rarest (Difficulty 0.3012)
+Difficulty = 0.3012, CfgFunc = "soreKraken", StateName =
 "SoreKrakenState", NotifUI = "SoreKrakenNotifUI", PreferRod = "Sore Kraken Rod",
 UnlockAttr = "SoreKrakenUnlocked", CFrame = CFrame.new(-16547.748, 3776.079,
 -4804.017, 0.3007, -0.0000, 0.9537, 0.0000, 1.0000, 0.0000,
 -0.9537, 0.0000, 0.3007), }, Thalvyra = { Key = "Thalvyra", Name = "Thalvyra",
-Priority = 2, -- Medium (Difficulty 0.6090) Difficulty = 0.6090, CfgFunc =
+Priority = 2, -- Medium (Difficulty 0.6090)
+Difficulty = 0.6090, CfgFunc =
 "thalvyra", StateName = "ThalvyraState", NotifUI = "ThalvyraNotifUI", PreferRod
 = "Thalvyra Rod", UnlockAttr = "CrimsonUnlocked", CFrame =
 CFrame.new(-16408.523, 4193.781, -2052.475, 0.7052, -0.0000,
@@ -187,7 +189,8 @@ end
 return rsc 
 end
 
--- ==================== UTILITIES ==================== local Util = {}
+-- ==================== UTILITIES ====================
+local Util = {}
 
 function Util.trim(s) if type(s) ~= "string" then
     return "" 
@@ -225,8 +228,7 @@ local
 total = math.floor(seconds + 0.5) local days = math.floor(total / 86400) local
 hours = math.floor((total % 86400) / 3600) local mins = math.floor((total
 % 3600) / 60) local secs = total % 60 if days > 0 then
-    return string.format("%dd
-%dh", days, hours) 
+    return string.format("%dd %dh", days, hours) 
 elseif hours > 0 then
         return string.format("%dh %dm", hours,
         mins) 
@@ -329,8 +331,8 @@ end
 
 end
 
--- ==================== STATE, REMOTES, CONNECTIONS & UI REFS
-==================== local Remotes = { Cast = nil, Reel = nil, SellAll = nil,
+-- ==================== STATE, REMOTES, CONNECTIONS & UI REFS ====================
+local Remotes = { Cast = nil, Reel = nil, SellAll = nil,
 SetAuto = nil, GetState = nil, Server = nil } local Conns = { Global = {}, Char
 = {}, LevelUp = {}, PrimNotif = {}, Gradient = nil, BarFill = nil, BarSize =
 nil, InfoText = nil, FishingVis = nil, GuiDesc = nil, Server = nil, Heartbeat =
@@ -792,7 +794,8 @@ if numPart and suffix then
     _, _, _, tot = Monitor.readLevelXp() m.StartObservedXp = tot 
 end
 
--- ==================== DISCORD WEBHOOK MODULE ==================== function
+-- ==================== DISCORD WEBHOOK MODULE ====================
+function
 Webhook.getHttpFuncs() local list, seen = {}, {} local candidates = { request,
 http_request, http and http.request, syn and syn.request, fluxus and
 fluxus.request } for i = 1, 5 do
@@ -1201,7 +1204,8 @@ end
 end
 end
 
--- ==================== LEVELUP UI AUTO-CLOSER ==================== local
+-- ==================== LEVELUP UI AUTO-CLOSER ====================
+local
 function closeLevelUpUI(gui) if not State.EnabledAutoCloseLevelUp or not gui or
 not gui.Parent then
     return 
@@ -1836,7 +1840,8 @@ elseif eventName == "CastOk" then
 
         end
 
-        -- ==================== UI CACHING & BINDINGS ==================== local
+        -- ==================== UI CACHING & BINDINGS ====================
+local
         function bindServerRemote(remote) if Conns.Server then
             Conns.Server:Disconnect()
             Conns.Server = nil 
@@ -2033,7 +2038,8 @@ if gui then
             end
             ))
 
-            -- ==================== REMOTE RESOLUTION ==================== local function
+            -- ==================== REMOTE RESOLUTION ====================
+local function
             isRemoteValid(r) return r ~= nil and r.Parent ~= nil 
         end
 
@@ -2079,8 +2085,7 @@ task.spawn(function() local attempts = 0 while not resolveRemotes() do
     attempts
     += 1 task.wait(attempts <= 25 and 0.25 or 1) 
 end
-print("[Auto Fish] CastRemote
-connected.") resolveAllConfigs() Monitor.refreshBait() task.spawn(function() for
+print("[Auto Fish] CastRemote connected.") resolveAllConfigs() Monitor.refreshBait() task.spawn(function() for
 _ = 1, 20 do
     resolveRemotes() resolveAllConfigs() if isRemoteValid(Remotes.Reel)
     and isRemoteValid(Remotes.SellAll) and isRemoteValid(Remotes.SetAuto) and
@@ -2095,7 +2100,8 @@ end
 end
 )
 
--- ==================== UNIVERSAL ROD AUTO EQUIP ==================== function
+-- ==================== UNIVERSAL ROD AUTO EQUIP ====================
+function
 RodSys.isRod(tool) if not tool or not tool:IsA("Tool") then
     return false 
 end
@@ -2356,7 +2362,8 @@ end
 table.insert(Conns.Global,
 LocalPlayer.CharacterAdded:Connect(bindCharacterEvents))
 
--- ==================== CLICKER & MAIN LOOP ==================== local function
+-- ==================== CLICKER & MAIN LOOP ====================
+local function
 doClick() if State.ClickMethod == "Input Signals" then
     local mouse =
     LocalPlayer:GetMouse() if mouse then
@@ -2517,7 +2524,8 @@ elseif
     end
 end
 
--- ==================== RAYFIELD UI CREATION (SCOPED) ==================== do
+-- ==================== RAYFIELD UI CREATION (SCOPED) ====================
+do
 local function safeStat(tab, opts) if tab and type(tab.CreateStat) == "function"
 then
     local okS, h = pcall(tab.CreateStat, tab, opts) if okS and h then
@@ -2889,7 +2897,7 @@ end
 end
 local
 function primLine(spotKey, curLvl, gear) local spot =
-CONST.PRIMORDIAL_SPOTS[spotKey] local cfg = Cfgspot.CfgFunc if not cfg then
+CONST.PRIMORDIAL_SPOTS[spotKey] local cfg = Cfg[spot.CfgFunc]() if not cfg then
     return spot.Name .. ": Config loading..." 
 end
 
@@ -3015,7 +3023,8 @@ while State.Monitor.Active do
 end
 )
 
--- ==================== STARTUP SEQUENCE ==================== State.EnabledCast
+-- ==================== STARTUP SEQUENCE ====================
+State.EnabledCast
 = true State.EnabledFastSafeReel = true State.EnabledColorReel = false
 State.EnabledGameAutoCast = false updateLoop()
 
@@ -3046,15 +3055,11 @@ then
     Primordial.evaluate() 
 end
 Webhook.connected() 
-end
-)
+end)
 
-print(string.format("[Auto Fish v%s] Ready: Fast Safe Reel, Ping Auto-Tune,
-Primordial Auto-TP, Rate Monitor & Webhook.", SCRIPT_VERSION))
+print(string.format("[Auto Fish v%s] Ready: Fast Safe Reel, Ping Auto-Tune, Primordial Auto-TP, Rate Monitor & Webhook.", SCRIPT_VERSION))
 
 task.defer(function() UI.Window:Notify({ title = "Auto Fish v" ..
-SCRIPT_VERSION, content = State.Webhook.Enabled and "Primordial Auto-TP + Rate
-Monitor + Webhook Active" or "Primordial Auto-TP + Rate Monitor Active",
+SCRIPT_VERSION, content = State.Webhook.Enabled and "Primordial Auto-TP + Rate Monitor + Webhook Active" or "Primordial Auto-TP + Rate Monitor Active",
 duration = 4, }) 
-end
-)
+end)
