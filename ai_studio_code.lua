@@ -19,12 +19,15 @@ end
 
 -- ==================== SERVICES & CORE ====================
 local Svc = {
-Players = game:GetService("Players"), VirtualUser =
-game:GetService("VirtualUser"), ReplicatedStorage =
-game:GetService("ReplicatedStorage"), RunService =
-game:GetService("RunService"), UIS = game:GetService("UserInputService"),
-Collection = game:GetService("CollectionService"), Http =
-game:GetService("HttpService"), Gui = game:GetService("GuiService"), }
+Players = game:GetService("Players"), 
+VirtualUser = game:GetService("VirtualUser"), 
+ReplicatedStorage = game:GetService("ReplicatedStorage"), 
+RunService = game:GetService("RunService"), 
+UIS = game:GetService("UserInputService"),
+Collection = game:GetService("CollectionService"), 
+Http = game:GetService("HttpService"), 
+Gui = game:GetService("GuiService"), 
+}
 
 local LocalPlayer = Svc.Players.LocalPlayer while not LocalPlayer do
     task.wait()
@@ -53,8 +56,8 @@ else
 end
 end
 
-task.spawn(function() print(string.format("[Anti-AFK] Initialized: Proactive keep-alive active (every %d seconds).", AntiAFKState.Interval)) while
-AntiAFKState.Active do
+task.spawn(function() print(string.format("[Anti-AFK] Initialized: Proactive keep-alive active (every %d seconds).", AntiAFKState.Interval)) 
+while AntiAFKState.Active do
     task.wait(AntiAFKState.Interval) if not
     AntiAFKState.Active then
         break 
