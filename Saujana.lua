@@ -1,25 +1,19 @@
--- Saujana Auto Fish | Version 2.6.1
-local SCRIPT_VERSION = "2.6.1"
+local SCRIPT_VERSION = "2.7.0"
+local TARGET_PLACE_ID = 89346234653070
 
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
 
-local TARGET_PLACE_ID = 89346234653070
 if game.PlaceId ~= TARGET_PLACE_ID then
-    warn(string.format("[Auto Fish] PlaceId mismatch! Expected %d, got %d — aborting.", TARGET_PLACE_ID, game.PlaceId))
     return
 end
 
-print(string.format("========== AUTO FISH v%s STARTING ==========", SCRIPT_VERSION))
-
 local envGlobal: { [string]: any } = (type(getgenv) == "function" and getgenv()) or {}
-if envGlobal._AutoFishCleanup then
+if type(envGlobal._AutoFishCleanup) == "function" then
     pcall(envGlobal._AutoFishCleanup)
-    print("[Auto Fish] Cleaned up previous script instance.")
 end
 
--- ==================== SERVICES & CORE ====================
 local Svc = {
     Players = game:GetService("Players"),
     VirtualUser = game:GetService("VirtualUser"),
@@ -38,59 +32,46 @@ while not LocalPlayer do
     LocalPlayer = Svc.Players.LocalPlayer
 end
 
--- ==================== ANTI-AFK MODULE ====================
-if envGlobal._AntiAFKState then
+if type(envGlobal._AntiAFKState) == "table" then
     envGlobal._AntiAFKState.Active = false
 end
-
 local AntiAFKState = { Active = true, Interval = 120 }
 envGlobal._AntiAFKState = AntiAFKState
 
-local function sendAntiAFKPulse(sourceLabel: string)
-    local success, err = pcall(function()
+local function sendAntiAFKPulse()
+    pcall(function()
         Svc.VirtualUser:CaptureController()
         Svc.VirtualUser:ClickButton2(Vector2.zero)
     end)
-    if success then
-        print(string.format("[Anti-AFK] %s pulse sent at %s", sourceLabel, os.date("%X")))
-    else
-        warn(string.format("[Anti-AFK] %s failed: %s", sourceLabel, tostring(err)))
-    end
 end
 
 task.spawn(function()
-    print(string.format("[Anti-AFK] Initialized: Proactive keep-alive active (every %d seconds).", AntiAFKState.Interval))
     while AntiAFKState.Active do
         task.wait(AntiAFKState.Interval)
         if not AntiAFKState.Active then
             break
         end
-        sendAntiAFKPulse("Keep-alive")
+        sendAntiAFKPulse()
     end
-    print("[Anti-AFK] Worker thread safely exited.")
 end)
 
--- ==================== LOAD RAYFIELD ====================
-local ok, Rayfield
-for attempt = 1, 3 do
-    ok, Rayfield = pcall(function()
+local okRf, Rayfield
+for _ = 1, 3 do
+    okRf, Rayfield = pcall(function()
         return loadstring(game:HttpGet("https://sirius.menu/gen2"))()
     end)
-    if ok and Rayfield then
+    if okRf and Rayfield then
         break
     end
-    warn(string.format("[Auto Fish] Rayfield attempt %d failed: %s", attempt, tostring(Rayfield)))
     task.wait(2)
 end
-if not ok or not Rayfield then
+if not okRf or not Rayfield then
     AntiAFKState.Active = false
-    warn("[Auto Fish] Rayfield failed to load after 3 attempts.")
     return
 end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 
--- ==================== CONSTANTS & CONFIG LOADERS ====================
 local CONST = {
     DEFAULT_MINIGAME = {
         StartingProgress = 0.4,
@@ -127,21 +108,6 @@ local CONST = {
         ["Lucky Shot"] = true,
         ["Saujana Signature"] = true,
     },
-    SUPREMACY_RODS = {
-        ["Wings Everlove"] = true,
-        ["Divine"] = true,
-        ["Immortal"] = true,
-        ["Golden Zenith"] = true,
-        ["Supreme Divinity"] = true,
-        ["Oceanus"] = true,
-        ["Thaloryx"] = true,
-        ["Celestra Rod"] = true,
-        ["Thalvyra Rod"] = true,
-        ["Sore Kraken Rod"] = true,
-        ["Owner Rod"] = true,
-    },
-    PRIMORDIAL_BASE_MIN = 6.12366238e-05 * 0.5 * 1.1 * (2 / 3),
-    PRIMORDIAL_BASE_MAX = 0.00018345682749999997 * 0.5 * 1.1 * (2 / 3),
     PRIMORDIAL_ORDER = { "SoreKraken", "Thalvyra", "Celestra" },
     PRIMORDIAL_SPOTS = {
         SoreKraken = {
@@ -149,10 +115,7 @@ local CONST = {
             Name = "Sore Kraken",
             ShortName = "S.Kraken",
             Priority = 3,
-            RequireLevel = 300,
-            Difficulty = 0.3012222938391323,
-            ForceAttr = "SoreKrakenForceUntil",
-            CfgFunc = "soreKraken",
+            CfgName = "SoreKrakenConfig",
             StateName = "SoreKrakenState",
             NotifUI = "SoreKrakenNotifUI",
             UnlockAttr = "SoreKrakenUnlocked",
@@ -160,7 +123,7 @@ local CONST = {
             PreferRod = "Sore Kraken Rod",
             SignFolder = "SORE KRAKEN",
             SignPart = "UISoreKraken",
-            SignName = "SoreKrakenSign",
+            SignGui = "SoreKrakenSign",
             CFrame = CFrame.new(-16547.748, 3776.079, -4804.017, 0.3007, -0.0000, 0.9537, 0.0000, 1.0000, 0.0000, -0.9537, 0.0000, 0.3007),
         },
         Thalvyra = {
@@ -168,10 +131,7 @@ local CONST = {
             Name = "Thalvyra",
             ShortName = "Thalvyra",
             Priority = 2,
-            RequireLevel = 150,
-            Difficulty = 0.6090283148497158,
-            ForceAttr = "ThalvyraForceUntil",
-            CfgFunc = "thalvyra",
+            CfgName = "ThalvyraConfig",
             StateName = "ThalvyraState",
             NotifUI = "ThalvyraNotifUI",
             UnlockAttr = "CrimsonUnlocked",
@@ -179,7 +139,7 @@ local CONST = {
             PreferRod = "Thalvyra Rod",
             SignFolder = "THALVYRA",
             SignPart = "CrimsonVolcanoUI",
-            SignName = "ThalvyraSign",
+            SignGui = "ThalvyraSign",
             CFrame = CFrame.new(-16408.523, 4193.781, -2052.475, 0.7052, -0.0000, -0.7090, 0.0000, 1.0000, -0.0000, 0.7090, 0.0000, 0.7052),
         },
         Celestra = {
@@ -187,10 +147,7 @@ local CONST = {
             Name = "Celestra",
             ShortName = "Celestra",
             Priority = 1,
-            RequireLevel = 90,
-            Difficulty = 1.0,
-            ForceAttr = "CelestraForceUntil",
-            CfgFunc = "celestra",
+            CfgName = "CelestraConfig",
             StateName = "CelestraState",
             NotifUI = "CelestraNotifUI",
             UnlockAttr = "NpcTalkedRevano",
@@ -198,7 +155,7 @@ local CONST = {
             PreferRod = "Celestra Rod",
             SignFolder = "CELESTRA",
             SignPart = "Nocturne Cave",
-            SignName = "CelestraSign",
+            SignGui = "CelestraSign",
             CFrame = CFrame.new(-16322.375, 3885.807, -2916.187, 0.6414, 0.0000, 0.7672, -0.0000, 1.0000, -0.0000, -0.7672, 0.0000, 0.6414),
         },
     },
@@ -206,10 +163,11 @@ local CONST = {
 
 local Cache: { [string]: any } = {
     Configs = {},
-    ConfigTried = {},
     States = {},
-    StateTried = {},
+    Fallbacks = {},
     SkinDisplays = nil,
+    CoffeeNames = nil,
+    CoffeeOrder = nil,
     FishingFrame = nil,
     InfoLabel = nil,
     TapBtn = nil,
@@ -226,18 +184,209 @@ local Cache: { [string]: any } = {
     VipCheckedAt = 0,
 }
 
+do
+    local cel = {
+        FishName = "Celestra",
+        CooldownSeconds = 5400,
+        WindowSeconds = 1800,
+        CycleSeconds = 7200,
+        ChanceMin = 6.12366238e-05 * 0.5 * 1.1 * 0.6666666666666666,
+        ChanceMax = 0.00018345682749999997 * 0.5 * 1.1 * 0.6666666666666666,
+        LuckFloor = 9,
+        LuckCap = 70,
+        RequireLevel = 90,
+        ForceAttribute = "CelestraForceUntil",
+    }
+    function cel.isActive(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(cel.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return true
+        end
+        return (t % cel.CycleSeconds) < cel.WindowSeconds
+    end
+    function cel.secondsLeft(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(cel.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return f - t
+        end
+        local ph = t % cel.CycleSeconds
+        if ph >= cel.WindowSeconds then
+            return 0
+        end
+        return cel.WindowSeconds - ph
+    end
+    function cel.secondsUntil(nowEp)
+        local t = nowEp or os.time()
+        if cel.isActive(t) then
+            return 0
+        end
+        local ph = t % cel.CycleSeconds
+        if ph < cel.WindowSeconds then
+            return 0
+        end
+        return cel.CycleSeconds - ph
+    end
+    function cel.chance(luck)
+        local v1 = math.log(cel.LuckFloor)
+        local v2 = math.log(cel.LuckCap)
+        local v3 = math.clamp((math.log(math.max(luck or 1, 1)) - v1) / (v2 - v1), 0, 1)
+        return cel.ChanceMin + (cel.ChanceMax - cel.ChanceMin) * v3
+    end
+    Cache.Fallbacks.CelestraConfig = cel
+
+    local tha = {
+        FishName = "Thalvyra",
+        CooldownSeconds = 12600,
+        WindowSeconds = 1800,
+        CycleSeconds = 14400,
+        Offset = 3600,
+        AvoidGap = 120,
+        ChanceMin = cel.ChanceMin * 0.6090283148497158,
+        ChanceMax = cel.ChanceMax * 0.6090283148497158,
+        LuckFloor = cel.LuckFloor,
+        LuckCap = cel.LuckCap,
+        RequireLevel = 150,
+        ForceAttribute = "ThalvyraForceUntil",
+    }
+    local function celOverlapEnd(a1, a2)
+        local base = math.floor(a1 / cel.CycleSeconds)
+        for i = base - 1, base + 1 do
+            local st = i * cel.CycleSeconds
+            if a1 < st + cel.WindowSeconds and st < a1 + a2 then
+                return st + cel.WindowSeconds
+            end
+        end
+        return nil
+    end
+    local function thaWindowStart(idx)
+        local st = idx * tha.CycleSeconds + tha.Offset
+        for _ = 1, 3 do
+            local ov = celOverlapEnd(st, tha.WindowSeconds)
+            if not ov then
+                break
+            end
+            st = ov + tha.AvoidGap
+        end
+        return st
+    end
+    local function thaCurrentStart(t)
+        local base = math.floor((t - tha.Offset) / tha.CycleSeconds)
+        for i = base - 1, base do
+            local st = thaWindowStart(i)
+            if st <= t and t < st + tha.WindowSeconds then
+                return st
+            end
+        end
+        return nil
+    end
+    local function thaNextStart(t)
+        local base = math.floor((t - tha.Offset) / tha.CycleSeconds)
+        for i = base - 1, base + 2 do
+            local st = thaWindowStart(i)
+            if t < st then
+                return st
+            end
+        end
+        return t + tha.CycleSeconds
+    end
+    function tha.isActive(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(tha.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return true
+        end
+        return thaCurrentStart(t) ~= nil
+    end
+    function tha.secondsLeft(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(tha.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return f - t
+        end
+        local st = thaCurrentStart(t)
+        if not st then
+            return 0
+        end
+        return st + tha.WindowSeconds - t
+    end
+    function tha.secondsUntil(nowEp)
+        local t = nowEp or os.time()
+        if tha.isActive(t) then
+            return 0
+        end
+        return thaNextStart(t) - t
+    end
+    function tha.chance(luck)
+        local v1 = math.log(tha.LuckFloor)
+        local v2 = math.log(tha.LuckCap)
+        local v3 = math.clamp((math.log(math.max(luck or 1, 1)) - v1) / (v2 - v1), 0, 1)
+        return tha.ChanceMin + (tha.ChanceMax - tha.ChanceMin) * v3
+    end
+    Cache.Fallbacks.ThalvyraConfig = tha
+
+    local sk = {
+        FishName = "Sore Kraken",
+        WindowSeconds = 1800,
+        CycleSeconds = 14400,
+        Offset = 10800,
+        ChanceMin = cel.ChanceMin * 0.3012222938391323,
+        ChanceMax = cel.ChanceMax * 0.3012222938391323,
+        LuckFloor = cel.LuckFloor,
+        LuckCap = cel.LuckCap,
+        RequireLevel = 300,
+        ForceAttribute = "SoreKrakenForceUntil",
+    }
+    local function skCurrentStart(t)
+        local st = math.floor((t - sk.Offset) / sk.CycleSeconds) * sk.CycleSeconds + sk.Offset
+        if st <= t and t < st + sk.WindowSeconds then
+            return st
+        end
+        return nil
+    end
+    function sk.isActive(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(sk.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return true
+        end
+        return skCurrentStart(t) ~= nil
+    end
+    function sk.secondsLeft(nowEp)
+        local t = nowEp or os.time()
+        local f = tonumber(Svc.ReplicatedStorage:GetAttribute(sk.ForceAttribute)) or 0
+        if (f - t) > 0 then
+            return f - t
+        end
+        local st = skCurrentStart(t)
+        if not st then
+            return 0
+        end
+        return st + sk.WindowSeconds - t
+    end
+    function sk.secondsUntil(nowEp)
+        local t = nowEp or os.time()
+        if sk.isActive(t) then
+            return 0
+        end
+        return (math.floor((t - sk.Offset) / sk.CycleSeconds) + 1) * sk.CycleSeconds + sk.Offset - t
+    end
+    function sk.chance(luck)
+        local v1 = math.log(sk.LuckFloor)
+        local v2 = math.log(sk.LuckCap)
+        local v3 = math.clamp((math.log(math.max(luck or 1, 1)) - v1) / (v2 - v1), 0, 1)
+        return sk.ChanceMin + (sk.ChanceMax - sk.ChanceMin) * v3
+    end
+    Cache.Fallbacks.SoreKrakenConfig = sk
+end
+
 local Cfg = {}
 
 function Cfg.get(name: string)
     if Cache.Configs[name] then
         return Cache.Configs[name]
     end
-    local now = os.clock()
-    if Cache.ConfigTried[name] and (now - Cache.ConfigTried[name]) < 15 then
-        return nil
-    end
-    Cache.ConfigTried[name] = now
-
     local shared = Svc.ReplicatedStorage:FindFirstChild("Shared")
     local cfgFolder = shared and shared:FindFirstChild("Config")
     local mod = cfgFolder and cfgFolder:FindFirstChild(name)
@@ -250,19 +399,13 @@ function Cfg.get(name: string)
             return tbl
         end
     end
-    return nil
+    return Cache.Fallbacks[name]
 end
 
 function Cfg.sharedMod(name: string)
     if Cache.States[name] then
         return Cache.States[name]
     end
-    local now = os.clock()
-    if Cache.StateTried[name] and (now - Cache.StateTried[name]) < 15 then
-        return nil
-    end
-    Cache.StateTried[name] = now
-
     local shared = Svc.ReplicatedStorage:FindFirstChild("Shared")
     local mod = shared and shared:FindFirstChild(name)
     if mod then
@@ -277,44 +420,8 @@ function Cfg.sharedMod(name: string)
     return nil
 end
 
-function Cfg.fish()
-    return Cfg.get("FishConfig")
-end
-
-function Cfg.rod()
-    return Cfg.get("RodConfig")
-end
-
-function Cfg.bait()
-    return Cfg.get("BaitConfig")
-end
-
-function Cfg.enhance()
-    return Cfg.get("RodEnhanceConfig")
-end
-
-function Cfg.level()
-    return Cfg.get("LevelConfig")
-end
-
-function Cfg.celestra()
-    return Cfg.get("CelestraConfig")
-end
-
-function Cfg.thalvyra()
-    return Cfg.get("ThalvyraConfig")
-end
-
-function Cfg.soreKraken()
-    return Cfg.get("SoreKrakenConfig")
-end
-
-function Cfg.coffee()
-    return Cfg.get("CoffeeConfig")
-end
-
 function Cfg.minigame()
-    local fc = Cfg.fish()
+    local fc = Cfg.get("FishConfig")
     if fc and type(fc.Minigame) == "table" then
         return fc.Minigame
     end
@@ -335,7 +442,34 @@ function Cfg.rodSkin()
     return rsc
 end
 
--- ==================== UTILITIES ====================
+function Cfg.syncCoffeeCache()
+    local cc = Cfg.get("CoffeeConfig")
+    if cc and not Cache.CoffeeOrder and type(cc.Coffees) == "table" then
+        local names = {}
+        local ordered = {}
+        for _, entry in ipairs(cc.Coffees) do
+            if type(entry) == "table" and type(entry.Id) == "string" then
+                table.insert(ordered, entry)
+                if type(entry.Name) == "string" then
+                    names[entry.Name] = true
+                end
+            end
+        end
+        table.sort(ordered, function(a, b)
+            return (tonumber(a.Order) or tonumber(a.Duration) or 0) > (tonumber(b.Order) or tonumber(b.Duration) or 0)
+        end)
+        local idList = {}
+        for _, entry in ipairs(ordered) do
+            table.insert(idList, entry.Id)
+        end
+        if #idList > 0 then
+            Cache.CoffeeOrder = idList
+            Cache.CoffeeNames = names
+        end
+    end
+    return cc
+end
+
 local Util = {}
 
 function Util.trim(s)
@@ -346,8 +480,7 @@ function Util.trim(s)
 end
 
 function Util.isValidWebhookUrl(url)
-    local clean = Util.trim(url)
-    return string.match(clean, "^https?://[%w%.%-]+/api/webhooks/") ~= nil
+    return string.match(Util.trim(url), "^https?://[%w%.%-]+/api/webhooks/") ~= nil
 end
 
 function Util.serverNow()
@@ -510,7 +643,6 @@ function Util.triggerBtn(btn)
     end)
 end
 
--- ==================== STATE, REMOTES, CONNECTIONS & UI ====================
 local Remotes: { [string]: any } = {
     Cast = nil,
     Reel = nil,
@@ -540,6 +672,7 @@ local Conns: { [string]: any } = {
 
 local UI: { [string]: any } = {
     Window = nil,
+    StatusTag = nil,
     AutoCastToggle = nil,
     PrimordialToggle = nil,
     GameAutoCastToggle = nil,
@@ -552,6 +685,7 @@ local UI: { [string]: any } = {
     StatXpHr = nil,
     StatCaught = nil,
     StatLevel = nil,
+    LevelProgress = nil,
     ParaRate = nil,
     ParaGear = nil,
     ParaXp = nil,
@@ -663,7 +797,6 @@ local State: { [string]: any } = {
         LastAttemptAt = 0,
         BrewCooldownUntil = 0,
         FelliciaCFrame = nil,
-        WarnedFar = false,
         WarnedHotbar = false,
     },
 }
@@ -709,7 +842,6 @@ State.Monitor = {
     RarityCounts = {},
     FailReasons = { Invalid = 0, Lost = 0, Timeout = 0, Full = 0, Other = 0 },
     LastFishText = "None yet",
-    LastLoopWarnAt = 0,
 }
 
 local function clearConnList(list)
@@ -751,11 +883,10 @@ end
 
 table.insert(Conns.Global, LocalPlayer.Idled:Connect(function()
     if AntiAFKState.Active then
-        sendAntiAFKPulse("Idled backup")
+        sendAntiAFKPulse()
     end
 end))
 
--- ==================== MODULE DECLARATIONS ====================
 local Monitor, RodSys, Webhook, Water, GameAuto, Reel, Primordial, Coffee, PrimHud, Binder, Engine = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
 
 -- ==================== MONITOR MODULE ====================
@@ -830,17 +961,20 @@ function Monitor.readProfileHud()
     end
 
     local capL, cntL = Cache.ExpCaption, Cache.ExpCount
-    if not capL or not cntL or not capL:IsA("TextLabel") or not cntL:IsA("TextLabel") then
+    if not capL or not cntL then
+        return nil
+    end
+    if not (capL:IsA("TextLabel") or capL:IsA("TextButton")) or not (cntL:IsA("TextLabel") or cntL:IsA("TextButton")) then
         return nil
     end
 
-    local capText = capL.ContentText or capL.Text or ""
-    local cntText = cntL.ContentText or cntL.Text or ""
+    local capText = (capL.ContentText and capL.ContentText ~= "") and capL.ContentText or capL.Text or ""
+    local cntText = (cntL.ContentText and cntL.ContentText ~= "") and cntL.ContentText or cntL.Text or ""
     if capText == "" or cntText == "" then
         return nil
     end
 
-    local lvlCfg = Cfg.level()
+    local lvlCfg = Cfg.get("LevelConfig")
     local maxLvl = (lvlCfg and lvlCfg.MaxLevel) or 2000
     local nextLvl = tonumber(string.match(capText, "LV%.?%s*(%d+)")) or tonumber(string.match(capText, "(%d+)"))
     local curLevel
@@ -852,16 +986,7 @@ function Monitor.readProfileHud()
         return nil
     end
 
-    local expectedReq = nil
-    if lvlCfg and type(lvlCfg.xpToNext) == "function" then
-        local okReq, reqVal = pcall(function()
-            return lvlCfg.xpToNext(curLevel)
-        end)
-        if okReq and type(reqVal) == "number" then
-            expectedReq = reqVal
-        end
-    end
-
+    local expectedReq = (lvlCfg and type(lvlCfg.xpToNext) == "function") and lvlCfg.xpToNext(curLevel) or nil
     local leftStr, rightStr = string.match(cntText, "([^/]+)/([^/]+)")
     local xpReq = Monitor.parseExpNum(rightStr, expectedReq) or expectedReq or 0
     local xpInto = Monitor.parseExpNum(leftStr, expectedReq) or 0
@@ -869,25 +994,19 @@ function Monitor.readProfileHud()
         return nil
     end
 
-    local totalXp = nil
-    if lvlCfg and type(lvlCfg.totalForLevel) == "function" then
-        local okTot, baseTot = pcall(function()
-            return lvlCfg.totalForLevel(curLevel)
-        end)
-        if okTot and type(baseTot) == "number" then
-            totalXp = baseTot + math.max(0, xpInto)
-        end
-    end
+    local totalXp = (lvlCfg and type(lvlCfg.totalForLevel) == "function")
+        and (lvlCfg.totalForLevel(curLevel) + math.max(0, xpInto))
+        or nil
     return curLevel, xpInto, xpReq, totalXp
 end
 
 function Monitor.readLevelXp()
-    local okHud, hl, hi, hr, ht = pcall(Monitor.readProfileHud)
-    if okHud and hl then
+    local hl, hi, hr, ht = Monitor.readProfileHud()
+    if hl then
         return hl, hi, hr, ht, "Profile HUD"
     end
 
-    local lvlCfg = Cfg.level()
+    local lvlCfg = Cfg.get("LevelConfig")
     local fLvl, fXp, fTot = nil, nil, nil
     for k, v in pairs(LocalPlayer:GetAttributes()) do
         if type(v) == "number" then
@@ -918,29 +1037,23 @@ function Monitor.readLevelXp()
         end
     end
 
-    if lvlCfg and type(lvlCfg.fromXp) == "function" and type(lvlCfg.totalForLevel) == "function" and type(lvlCfg.xpToNext) == "function" then
-        local okCalc, rL, rI, rR, rT = pcall(function()
-            if fTot then
-                local l, i, r = lvlCfg.fromXp(fTot)
-                return l, i, r, fTot
-            elseif fLvl and fXp then
-                local req = lvlCfg.xpToNext(fLvl)
-                if fXp >= req and lvlCfg.fromXp(fXp) == fLvl then
-                    local l, i, r = lvlCfg.fromXp(fXp)
-                    return l, i, r, fXp
-                else
-                    return fLvl, math.max(0, fXp), req, lvlCfg.totalForLevel(fLvl) + math.max(0, fXp)
-                end
-            elseif fLvl then
-                return fLvl, 0, lvlCfg.xpToNext(fLvl), lvlCfg.totalForLevel(fLvl)
-            elseif fXp then
+    if lvlCfg and type(lvlCfg.fromXp) == "function" and type(lvlCfg.totalForLevel) == "function" then
+        if fTot then
+            local l, i, r = lvlCfg.fromXp(fTot)
+            return l, i, r, fTot, "Attributes"
+        elseif fLvl and fXp then
+            local req = lvlCfg.xpToNext(fLvl)
+            if fXp >= req and lvlCfg.fromXp(fXp) == fLvl then
                 local l, i, r = lvlCfg.fromXp(fXp)
-                return l, i, r, fXp
+                return l, i, r, fXp, "Attributes"
+            else
+                return fLvl, math.max(0, fXp), req, lvlCfg.totalForLevel(fLvl) + math.max(0, fXp), "Attributes"
             end
-            return nil, nil, nil, nil
-        end)
-        if okCalc and rL then
-            return rL, rI, rR, rT, "Attributes"
+        elseif fLvl then
+            return fLvl, 0, lvlCfg.xpToNext(fLvl), lvlCfg.totalForLevel(fLvl), "Attributes"
+        elseif fXp then
+            local l, i, r = lvlCfg.fromXp(fXp)
+            return l, i, r, fXp, "Attributes"
         end
     end
     return fLvl, fXp, nil, fTot, "Estimated"
@@ -950,32 +1063,26 @@ function Monitor.avgLevelsPerHour(curLvl, curTotXp, xpHr)
     if xpHr <= 0 then
         return 0
     end
-    local lvlCfg = Cfg.level()
+    local lvlCfg = Cfg.get("LevelConfig")
     if not lvlCfg or type(lvlCfg.fromXp) ~= "function" or type(lvlCfg.xpToNext) ~= "function" then
         return 0
     end
-    local okAvg, val = pcall(function()
-        if curLvl and curTotXp and type(lvlCfg.totalForLevel) == "function" then
-            if curLvl >= (lvlCfg.MaxLevel or 2000) then
-                return 0
-            end
-            local fLvl, fInto = lvlCfg.fromXp(curTotXp + xpHr)
-            local cReq = math.max(1, lvlCfg.xpToNext(curLvl))
-            local fReq = math.max(1, lvlCfg.xpToNext(fLvl))
-            local cEx = curLvl + ((curTotXp - lvlCfg.totalForLevel(curLvl)) / cReq)
-            local fEx = fLvl + (fReq > 0 and (fInto / fReq) or 0)
-            return math.max(0, fEx - cEx)
+    if curLvl and curTotXp then
+        if curLvl >= (lvlCfg.MaxLevel or 2000) then
+            return 0
         end
-        return xpHr / math.max(1, lvlCfg.xpToNext(1))
-    end)
-    if okAvg and type(val) == "number" then
-        return val
+        local fLvl, fInto = lvlCfg.fromXp(curTotXp + xpHr)
+        local cReq = math.max(1, lvlCfg.xpToNext(curLvl))
+        local fReq = math.max(1, lvlCfg.xpToNext(fLvl))
+        local cEx = curLvl + ((curTotXp - lvlCfg.totalForLevel(curLvl)) / cReq)
+        local fEx = fLvl + (fReq > 0 and (fInto / fReq) or 0)
+        return math.max(0, fEx - cEx)
     end
-    return 0
+    return xpHr / math.max(1, lvlCfg.xpToNext(1))
 end
 
 function Monitor.extractEnhances(tool)
-    local enhanceCfg = Cfg.enhance()
+    local enhanceCfg = Cfg.get("RodEnhanceConfig")
     local directLuck = tool and tonumber(tool:GetAttribute("EnhanceLuck")) or nil
     local res = { Luck = directLuck or 0, SecretMult = 1, SupremacyMult = 1, PrimordialMult = 1, Names = {} }
     if not tool then
@@ -996,10 +1103,8 @@ function Monitor.extractEnhances(tool)
     end
 
     if enhanceCfg and #slots > 0 and type(enhanceCfg.combine) == "function" then
-        local okComb, comb = pcall(function()
-            return enhanceCfg.combine(slots)
-        end)
-        if okComb and type(comb) == "table" then
+        local comb = enhanceCfg.combine(slots)
+        if comb then
             if directLuck == nil then
                 res.Luck = comb.Luck or 0
             end
@@ -1039,7 +1144,7 @@ function Monitor.getBaitName()
     if type(State.DetectedBait) == "string" and State.DetectedBait ~= "" then
         return State.DetectedBait
     end
-    local bc = Cfg.bait()
+    local bc = Cfg.get("BaitConfig")
     return (bc and bc.Default) or "Basic Bait"
 end
 
@@ -1049,7 +1154,7 @@ function Monitor.getGearSummary(forceRefresh)
         return Cache.GearSummary
     end
 
-    local rc, bc, fc = Cfg.rod(), Cfg.bait(), Cfg.fish()
+    local rc, bc, fc = Cfg.get("RodConfig"), Cfg.get("BaitConfig"), Cfg.get("FishConfig")
     local activeTool = RodSys.findEquipped(LocalPlayer.Character) or RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"))
     local rodName = (activeTool and (activeTool:GetAttribute("RodName") or activeTool.Name)) or (rc and rc.Default) or "Basic Rod"
     local rodInfo = (rc and type(rc.get) == "function" and rc.get(rodName)) or nil
@@ -1068,30 +1173,17 @@ function Monitor.getGearSummary(forceRefresh)
     local mP, sP, supP = 0, 0, 0
     if fc and type(fc.topEffective) == "function" and type(fc.RarityOrder) == "table" then
         local ord = fc.RarityOrder[rodMaxRar] or 4
-        if ord >= 5 then
-            local okM, valM = pcall(function()
-                return fc.topEffective("Mythic", totalLuck, 1, 0, 1)
-            end)
-            if okM and type(valM) == "number" then
-                mP = valM
+        pcall(function()
+            if ord >= 5 then
+                mP = fc.topEffective("Mythic", totalLuck, 1, 0, 1)
             end
-        end
-        if ord >= 6 then
-            local okS, valS = pcall(function()
-                return fc.topEffective("Secret", totalLuck, 1, 0, enh.SecretMult)
-            end)
-            if okS and type(valS) == "number" then
-                sP = valS
+            if ord >= 6 then
+                sP = fc.topEffective("Secret", totalLuck, 1, 0, enh.SecretMult)
             end
-        end
-        if ord >= 7 then
-            local okSup, valSup = pcall(function()
-                return fc.topEffective("Supremacy", totalLuck, 1, 0, enh.SupremacyMult)
-            end)
-            if okSup and type(valSup) == "number" then
-                supP = valSup
+            if ord >= 7 then
+                supP = fc.topEffective("Supremacy", totalLuck, 1, 0, enh.SupremacyMult)
             end
-        end
+        end)
     end
 
     Cache.GearSummary = {
@@ -1133,7 +1225,7 @@ function Monitor.snapshot()
     local totAtt = m.TotalCaught + m.TotalFailed
     local sucPct = totAtt > 0 and ((m.TotalCaught / totAtt) * 100) or 100
 
-    local lvlCfg = Cfg.level()
+    local lvlCfg = Cfg.get("LevelConfig")
     local curLvl, curInto, curReq, curTot, xpHudSrc = Monitor.readLevelXp()
     if not m.StartObservedXp and curTot then
         m.StartObservedXp = curTot
@@ -1305,11 +1397,9 @@ function Webhook.sendNow(payload)
                     return false, "429 Rate Limited"
                 elseif code > 0 then
                     State.Webhook.FailedCount += 1
-                    local errMsg = (detail ~= "" and string.format("HTTP %d (%s)", code, detail)) or ("HTTP " .. tostring(code))
-                    warn("[Auto Fish Webhook] " .. errMsg)
-                    return false, errMsg
+                    return false, (detail ~= "" and string.format("HTTP %d (%s)", code, detail)) or ("HTTP " .. tostring(code))
                 else
-                    lastErr = (detail ~= "" and string.format("HTTP 0 (%s)", detail)) or "HTTP 0 (Request blocked or no response)"
+                    lastErr = (detail ~= "" and string.format("HTTP 0 (%s)", detail)) or "HTTP 0"
                 end
             else
                 lastErr = tostring(res)
@@ -1318,14 +1408,13 @@ function Webhook.sendNow(payload)
     end
 
     State.Webhook.FailedCount += 1
-    warn("[Auto Fish Webhook] " .. lastErr)
     return false, lastErr
 end
 
 function Webhook.buildReport(titleOverride, colorOverride)
     local snap = Monitor.snapshot()
     local gear = Monitor.getGearSummary()
-    local lvlCfg = Cfg.level()
+    local lvlCfg = Cfg.get("LevelConfig")
     local m = State.Monitor
 
     local statusText = State.IsFarmPausedNoWater and "Paused (Away from water)"
@@ -1334,7 +1423,8 @@ function Webhook.buildReport(titleOverride, colorOverride)
     local locText = "Normal Spot"
     if State.Primordial.CurrentEvent then
         local sp = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent]
-        local _, leftSec = Primordial.getSchedule(sp)
+        local cfg = sp and Cfg.get(sp.CfgName)
+        local leftSec = (cfg and type(cfg.secondsLeft) == "function") and cfg.secondsLeft(Util.serverNow()) or 0
         local evCaught = tonumber(Svc.ReplicatedStorage:GetAttribute(sp.CaughtAttr)) or 0
         locText = string.format("%s (%s left • Server %dx)", sp.Name, Util.formatDur(leftSec), evCaught)
     end
@@ -1348,12 +1438,8 @@ function Webhook.buildReport(titleOverride, colorOverride)
         local xpReq = snap.curXpReq or (type(lvlCfg.xpToNext) == "function" and lvlCfg.xpToNext(snap.curLevel) or 0)
         levelText = string.format("Lv. %d (%s)\n%s / %s XP", snap.curLevel, rTitle, Util.formatNum(snap.curXpInto or 0), Util.formatNum(xpReq))
         if snap.xpPerSec > 0 and snap.curTotalXp and type(lvlCfg.totalForLevel) == "function" and snap.curLevel < (lvlCfg.MaxLevel or 2000) then
-            local okNeed, nextNeed = pcall(function()
-                return math.max(0, lvlCfg.totalForLevel(snap.curLevel + 1) - snap.curTotalXp)
-            end)
-            if okNeed and type(nextNeed) == "number" then
-                etaNext = Util.formatDur(nextNeed / snap.xpPerSec)
-            end
+            local nextNeed = math.max(0, lvlCfg.totalForLevel(snap.curLevel + 1) - snap.curTotalXp)
+            etaNext = Util.formatDur(nextNeed / snap.xpPerSec)
         end
     end
 
@@ -1390,15 +1476,10 @@ function Webhook.rareCatch(fishName, rarity, weightKg, rawChance)
         return
     end
 
-    local fc = Cfg.fish()
+    local fc = Cfg.get("FishConfig")
     local oneInVal = tonumber(rawChance)
     if not oneInVal and fc and type(fc.oneIn) == "function" then
-        local okOne, resOne = pcall(function()
-            return fc.oneIn(fishName)
-        end)
-        if okOne then
-            oneInVal = resOne
-        end
+        oneInVal = fc.oneIn(fishName)
     end
     local chanceText = (oneInVal and oneInVal > 0) and ("1 in " .. Util.formatNum(oneInVal)) or "Rare Drop"
     if weightKg then
@@ -1971,7 +2052,7 @@ function Reel.onServerEvent(eventName, data)
         m.RarityCounts[rarity] = (m.RarityCounts[rarity] or 0) + 1
         m.LastFishText = string.format("%s (%s)", tostring(fishName), tostring(rarity))
 
-        local lvlCfg = Cfg.level()
+        local lvlCfg = Cfg.get("LevelConfig")
         local xpTbl = (lvlCfg and lvlCfg.FishXp) or CONST.DEFAULT_FISH_XP
         local baseXp = xpTbl[rarity] or 5
         local vipMult = (Monitor.detectVip() and (1 + ((lvlCfg and lvlCfg.VipBonus) or 0.25))) or 1
@@ -1986,7 +2067,6 @@ function Reel.onServerEvent(eventName, data)
                 State.LastBufferAdjustAt = now
                 State.ConsecutiveCatches = 0
                 Reel.updatePingSlider()
-                print(string.format("[Auto Fish] Ping Auto-Tune: Trimmed buffer to %.2fs after 25 clean catches.", State.PingBuffer))
             end
         end
     elseif eventName == "Failed" then
@@ -2013,7 +2093,6 @@ function Reel.onServerEvent(eventName, data)
             if State.ReelTimingMode == "Auto-Tune (Best)" and not State.AutoTuneUseFullTaps then
                 State.AutoTuneUseFullTaps = true
                 switched = true
-                warn("[Auto Fish] Auto-Tune: Upgraded to 100% taps after 'Invalid'.")
                 if UI.Window then
                     task.defer(function()
                         UI.Window:Notify({ title = "Auto-Tune Adjusted", content = "Switched to 100% tap timing for 0 fails", duration = 3 })
@@ -2027,10 +2106,9 @@ function Reel.onServerEvent(eventName, data)
                     State.PingBuffer = newBuf
                     State.AutoTuneFloorBuffer = math.max(State.AutoTuneFloorBuffer, newBuf)
                     Reel.updatePingSlider()
-                    warn(string.format("[Auto Fish] Ping Auto-Tune: Bumped buffer to %.2fs (floor locked).", newBuf))
                     if UI.Window then
                         task.defer(function()
-                            UI.Window:Notify({ title = "Ping Buffer Auto-Tuned", content = string.format("Increased Ping Buffer to %.2fs (0 fails lock)", newBuf), duration = 3 })
+                            UI.Window:Notify({ title = "Ping Buffer Auto-Tuned", content = string.format("Increased Ping Buffer to %.2fs", newBuf), duration = 3 })
                         end)
                     end
                 end
@@ -2088,7 +2166,9 @@ function Coffee.isCoffeeTool(tool)
     if tool:GetAttribute("CoffeeId") ~= nil then
         return true
     end
-    return CONST.COFFEE_NAMES[tool.Name] == true
+    Cfg.syncCoffeeCache()
+    local namesTbl = Cache.CoffeeNames or CONST.COFFEE_NAMES
+    return namesTbl[tool.Name] == true
 end
 
 function Coffee.syncHeldFlag()
@@ -2116,14 +2196,14 @@ function Coffee.cacheFellicia()
             or fell:FindFirstChild("HumanoidRootPart")
             or fell.PrimaryPart
             or fell:FindFirstChildWhichIsA("BasePart")
-        if root and root:IsA("BasePart") then
+        if root then
             State.Coffee.FelliciaCFrame = root.CFrame
         end
     end
 end
 
 function Coffee.getActiveInfo()
-    local cc = Cfg.coffee()
+    local cc = Cfg.syncCoffeeCache()
     local activeId = LocalPlayer:GetAttribute("CoffeeActive")
     local endEpoch = tonumber(LocalPlayer:GetAttribute("CoffeeEnd")) or 0
     local nowEp = Util.serverNow()
@@ -2159,7 +2239,7 @@ function Coffee.getInvCount(coffeeId)
         local tile = frame:FindFirstChild("Coffee_" .. coffeeId)
         if tile then
             local amtLbl = tile:FindFirstChild("Amount")
-            if amtLbl and amtLbl:IsA("TextLabel") then
+            if amtLbl and (amtLbl:IsA("TextLabel") or amtLbl:IsA("TextButton")) then
                 local amtNum = tonumber(string.match(amtLbl.Text or "", "(%d+)"))
                 if amtNum and amtNum > 0 then
                     return amtNum
@@ -2181,7 +2261,7 @@ function Coffee.hasTicket(coffeeId)
         local tile = frame:FindFirstChild("CoffeeTicket_" .. coffeeId)
         if tile then
             local amtLbl = tile:FindFirstChild("Amount")
-            if amtLbl and amtLbl:IsA("TextLabel") then
+            if amtLbl and (amtLbl:IsA("TextLabel") or amtLbl:IsA("TextButton")) then
                 local amtNum = tonumber(string.match(amtLbl.Text or "", "(%d+)"))
                 if amtNum and amtNum > 0 then
                     return true, amtNum
@@ -2193,14 +2273,23 @@ function Coffee.hasTicket(coffeeId)
     return false, 0
 end
 
+function Coffee.getCandidateOrder()
+    local pref = State.Coffee.Preference
+    if pref ~= "Best Available" and type(pref) == "string" then
+        return { pref }
+    end
+    Cfg.syncCoffeeCache()
+    return Cache.CoffeeOrder or CONST.COFFEE_ORDER
+end
+
 function Coffee.getStatusSummary()
     local id, display, left = Coffee.getActiveInfo()
     if id then
         return string.format("%s (%s left)", tostring(display), Util.formatDur(left))
     end
-    local cc = Cfg.coffee()
+    local cc = Cfg.syncCoffeeCache()
     local parts = {}
-    for _, cid in ipairs(CONST.COFFEE_ORDER) do
+    for _, cid in ipairs(Cache.CoffeeOrder or CONST.COFFEE_ORDER) do
         local inv = Coffee.getInvCount(cid)
         local _, tix = Coffee.hasTicket(cid)
         if inv > 0 or tix > 0 then
@@ -2216,7 +2305,7 @@ function Coffee.getStatusSummary()
 end
 
 function Coffee.findHeldOrBackpackTool(targetId)
-    local cc = Cfg.coffee()
+    local cc = Cfg.syncCoffeeCache()
     local info = (targetId and cc and cc.ById) and cc.ById[targetId] or nil
     local targetName = info and info.Name or nil
 
@@ -2225,8 +2314,12 @@ function Coffee.findHeldOrBackpackTool(targetId)
             for _, child in ipairs(container:GetChildren()) do
                 if child:IsA("Tool") then
                     local cid = child:GetAttribute("CoffeeId")
-                    if cid == targetId or (targetName and child.Name == targetName) or (not targetId and Coffee.isCoffeeTool(child)) then
-                        return child, cid or targetId
+                    if targetId then
+                        if cid == targetId or (targetName and child.Name == targetName) then
+                            return child, cid or targetId
+                        end
+                    elseif Coffee.isCoffeeTool(child) then
+                        return child, cid or child.Name
                     end
                 end
             end
@@ -2235,26 +2328,72 @@ function Coffee.findHeldOrBackpackTool(targetId)
     return nil, nil
 end
 
-function Coffee.getCandidateOrder()
-    local pref = State.Coffee.Preference
-    if pref ~= "Best Available" and type(pref) == "string" then
-        return { pref }
-    end
-    return CONST.COFFEE_ORDER
-end
-
 function Coffee.tradesRemaining()
-    local cc = Cfg.coffee()
-    local dayNum = (cc and type(cc.dayNumber) == "function") and cc.dayNumber(Util.serverNow()) or math.floor(Util.serverNow() / 86400)
+    local cc = Cfg.syncCoffeeCache()
+    if not cc then
+        return 0
+    end
+    local dayNum = (type(cc.dayNumber) == "function") and cc.dayNumber(Util.serverNow()) or math.floor(Util.serverNow() / 86400)
     local curDay = tonumber(LocalPlayer:GetAttribute("CoffeeDay")) or 0
     local used = (curDay == dayNum) and (tonumber(LocalPlayer:GetAttribute("CoffeeN")) or 0) or 0
-    local limit = (cc and type(cc.limitFor) == "function") and cc.limitFor(LocalPlayer) or ((cc and cc.DailyLimit) or 5)
+    local limit = (type(cc.limitFor) == "function") and cc.limitFor(LocalPlayer) or (cc.DailyLimit or 5)
     return math.max(0, limit - used)
+end
+
+function Coffee.drinkExistingTool(tool, labelId)
+    if not tool or not tool.Parent then
+        return false
+    end
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not char or not hum or hum.Health <= 0 then
+        return false
+    end
+
+    if tool.Parent ~= char then
+        hum:EquipTool(tool)
+        local eqAt = os.clock()
+        while tool.Parent ~= char and (os.clock() - eqAt) < 1.0 do
+            task.wait(0.05)
+        end
+    end
+
+    if tool.Parent ~= char then
+        return false
+    end
+
+    State.Coffee.HoldingTool = true
+    local enAt = os.clock()
+    while not tool.Enabled and (os.clock() - enAt) < 0.8 do
+        task.wait(0.05)
+    end
+
+    for _ = 1, 3 do
+        if not tool.Parent or tool.Parent ~= char then
+            break
+        end
+        if tool.Enabled then
+            tool:Activate()
+        end
+        local actWait = os.clock()
+        while (os.clock() - actWait) < 0.8 do
+            local activeId = Coffee.getActiveInfo()
+            if activeId or not tool.Parent then
+                if UI.Window then
+                    UI.Window:Notify({ title = "Coffee Boost Active!", content = "Drank " .. tostring(labelId or tool.Name), duration = 3 })
+                end
+                return true
+            end
+            task.wait(0.1)
+        end
+    end
+    return false
 end
 
 function Coffee.pullAndDrink(cid)
     State.Coffee.IsDrinking = true
     State.Coffee.DrinkStartedAt = os.clock()
+    State.Coffee.LastAttemptAt = os.clock() + 8
 
     local okRun, drank = pcall(function()
         local bWait = os.clock()
@@ -2262,91 +2401,54 @@ function Coffee.pullAndDrink(cid)
             task.wait(0.1)
         end
 
-        local tool = Coffee.findHeldOrBackpackTool(cid)
-        if not tool then
-            local holdRem = Remotes.CoffeeHold
-            local holdRes, holdReason = false, nil
-            if holdRem and holdRem.Parent then
-                local okH, r1, r2 = pcall(function()
-                    return holdRem:InvokeServer(cid)
-                end)
-                if okH then
-                    holdRes = r1
-                    holdReason = r2
-                end
-            end
+        local existingTool, existingId = Coffee.findHeldOrBackpackTool(nil)
+        if existingTool then
+            return Coffee.drinkExistingTool(existingTool, existingId)
+        end
 
-            if not holdRes and holdReason ~= "HotbarFull" then
-                local frame = Coffee.getItemsFrame()
-                local tile = frame and frame:FindFirstChild("Coffee_" .. cid)
-                if tile then
-                    Util.triggerBtn(tile)
-                end
-            elseif holdReason == "HotbarFull" and not State.Coffee.WarnedHotbar then
-                State.Coffee.WarnedHotbar = true
-                warn("[Auto Fish Coffee] Hotbar is full! Free 1 slot so Auto Coffee can hold your brew.")
-                if UI.Window then
-                    UI.Window:Notify({ title = "Coffee Blocked", content = "Hotbar full — free 1 tool slot for Coffee", duration = 4 })
+        local holdRem = Remotes.CoffeeHold
+        if holdRem and holdRem.Parent then
+            local okH, holdRes, holdReason = pcall(function()
+                return holdRem:InvokeServer(cid)
+            end)
+            if okH and holdRes == false then
+                if holdReason == "HotbarFull" and not State.Coffee.WarnedHotbar then
+                    State.Coffee.WarnedHotbar = true
+                    if UI.Window then
+                        UI.Window:Notify({ title = "Coffee Blocked", content = "Hotbar full — free 1 tool slot for Coffee", duration = 4 })
+                    end
                 end
                 return false
             end
-
-            local waitToolAt = os.clock()
-            while not tool and (os.clock() - waitToolAt) < 1.2 do
-                tool = Coffee.findHeldOrBackpackTool(cid)
-                if tool then
-                    break
-                end
-                task.wait(0.1)
+        else
+            local frame = Coffee.getItemsFrame()
+            local tile = frame and frame:FindFirstChild("Coffee_" .. cid)
+            if tile then
+                Util.triggerBtn(tile)
             end
         end
 
-        if not tool or not tool.Parent then
-            return false
-        end
-
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not char or not hum or hum.Health <= 0 then
-            return false
-        end
-
-        if tool.Parent ~= char then
-            hum:EquipTool(tool)
-            local eqAt = os.clock()
-            while tool.Parent ~= char and (os.clock() - eqAt) < 0.8 do
-                task.wait(0.05)
-            end
-        end
-
-        if tool.Parent ~= char then
-            return false
-        end
-
-        State.Coffee.HoldingTool = true
-        for _ = 1, 4 do
-            if not tool.Parent or tool.Parent ~= char then
+        local tool = nil
+        local waitToolAt = os.clock()
+        while not tool and (os.clock() - waitToolAt) < 1.5 do
+            tool = Coffee.findHeldOrBackpackTool(cid) or Coffee.findHeldOrBackpackTool(nil)
+            if tool then
                 break
             end
-            if tool.Enabled then
-                tool:Activate()
-            end
-            task.wait(0.25)
-            local activeId = Coffee.getActiveInfo()
-            if activeId then
-                if UI.Window then
-                    UI.Window:Notify({ title = "Coffee Boost Active!", content = "Drank " .. cid, duration = 3 })
-                end
-                return true
-            end
+            task.wait(0.1)
         end
-        return false
+
+        if not tool then
+            return false
+        end
+
+        return Coffee.drinkExistingTool(tool, cid)
     end)
 
     State.Coffee.IsDrinking = false
     Coffee.syncHeldFlag()
     if State.EnabledAutoEquip then
-        task.delay(0.15, RodSys.equip)
+        task.delay(0.2, RodSys.equip)
     end
     return okRun and drank == true
 end
@@ -2359,6 +2461,7 @@ function Coffee.brewBatchAndDrink(tasksToTry)
 
     State.Coffee.IsDrinking = true
     State.Coffee.DrinkStartedAt = os.clock()
+    State.Coffee.LastAttemptAt = os.clock() + 10
 
     local brewedId = nil
 
@@ -2390,84 +2493,79 @@ function Coffee.brewBatchAndDrink(tasksToTry)
             end
         end
 
-        if not brewedId and needVisitFellicia then
-            if State.Coffee.AutoVisitFellicia then
-                Coffee.cacheFellicia()
-                local fCF = State.Coffee.FelliciaCFrame
-                if not fCF then
-                    local fell = workspace:FindFirstChild("Fellicia", true)
-                    local root = fell and (fell:FindFirstChild("HumanoidRootPart") or fell.PrimaryPart or fell:FindFirstChildWhichIsA("BasePart"))
-                    if root and root:IsA("BasePart") then
-                        fCF = root.CFrame
-                        State.Coffee.FelliciaCFrame = fCF
-                    end
+        if not brewedId and needVisitFellicia and State.Coffee.AutoVisitFellicia then
+            Coffee.cacheFellicia()
+            local fCF = State.Coffee.FelliciaCFrame
+            if not fCF then
+                local fell = workspace:FindFirstChild("Fellicia", true)
+                local root = fell and (fell:FindFirstChild("HumanoidRootPart") or fell.PrimaryPart or fell:FindFirstChildWhichIsA("BasePart"))
+                if root then
+                    fCF = root.CFrame
+                    State.Coffee.FelliciaCFrame = fCF
+                end
+            end
+
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if fCF and char and hrp and hum and hum.Health > 0 then
+                local savedCF = hrp.CFrame
+                if State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent] then
+                    savedCF = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
                 end
 
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if fCF and char and hrp and hum and hum.Health > 0 then
-                    local savedCF = hrp.CFrame
-                    if State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent] then
-                        savedCF = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
+                pcall(function()
+                    LocalPlayer:RequestStreamAroundAsync(fCF.Position)
+                end)
+                if char.Parent and hrp.Parent and hum.Health > 0 then
+                    local destCF = fCF * CFrame.new(0, 1, -5)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    char:PivotTo(destCF)
+                    hrp.CFrame = destCF
+                    local wasAnc = hrp.Anchored
+                    hrp.Anchored = true
+                    task.wait(0.35)
+                    if hrp.Parent then
+                        hrp.Anchored = wasAnc
+                    end
+
+                    for _, item in ipairs(tasksToTry) do
+                        local cid, useTicket = item[1], item[2]
+                        local okB2, res2 = pcall(function()
+                            if useTicket then
+                                return brewRem:InvokeServer(cid, "ticket")
+                            else
+                                return brewRem:InvokeServer(cid)
+                            end
+                        end)
+                        if okB2 and type(res2) == "table" and res2.ok then
+                            brewedId = cid
+                            break
+                        end
                     end
 
                     pcall(function()
-                        LocalPlayer:RequestStreamAroundAsync(fCF.Position)
+                        LocalPlayer:RequestStreamAroundAsync(savedCF.Position)
                     end)
-                    if char.Parent and hrp.Parent and hum.Health > 0 then
-                        local destCF = fCF * CFrame.new(0, 1, -5)
+                    if char.Parent and hrp.Parent then
                         hrp.AssemblyLinearVelocity = Vector3.zero
-                        char:PivotTo(destCF)
-                        hrp.CFrame = destCF
-                        local wasAnc = hrp.Anchored
+                        char:PivotTo(savedCF)
+                        hrp.CFrame = savedCF
+                        local wasAnc2 = hrp.Anchored
                         hrp.Anchored = true
                         task.wait(0.35)
                         if hrp.Parent then
-                            hrp.Anchored = wasAnc
-                        end
-
-                        for _, item in ipairs(tasksToTry) do
-                            local cid, useTicket = item[1], item[2]
-                            local okB2, res2 = pcall(function()
-                                if useTicket then
-                                    return brewRem:InvokeServer(cid, "ticket")
-                                else
-                                    return brewRem:InvokeServer(cid)
-                                end
-                            end)
-                            if okB2 and type(res2) == "table" and res2.ok then
-                                brewedId = cid
-                                break
-                            end
-                        end
-
-                        pcall(function()
-                            LocalPlayer:RequestStreamAroundAsync(savedCF.Position)
-                        end)
-                        if char.Parent and hrp.Parent then
+                            hrp.Anchored = wasAnc2
                             hrp.AssemblyLinearVelocity = Vector3.zero
-                            char:PivotTo(savedCF)
-                            hrp.CFrame = savedCF
-                            local wasAnc2 = hrp.Anchored
-                            hrp.Anchored = true
-                            task.wait(0.35)
-                            if hrp.Parent then
-                                hrp.Anchored = wasAnc2
-                                hrp.AssemblyLinearVelocity = Vector3.zero
-                            end
                         end
                     end
                 end
-            elseif not State.Coffee.WarnedFar then
-                State.Coffee.WarnedFar = true
-                warn("[Auto Fish Coffee] Too far from Fellicia to brew remotely.")
             end
         end
 
         if brewedId then
             if UI.Window then
-                UI.Window:Notify({ title = "Coffee Brewed", content = "Crafted " .. brewedId .. "!", duration = 3 })
+                UI.Window:Notify({ title = "Coffee Brewed", content = "Crafted " .. brewedId, duration = 3 })
             end
             local waitStart = os.clock()
             while Coffee.getInvCount(brewedId) <= 0 and not Coffee.findHeldOrBackpackTool(brewedId) and (os.clock() - waitStart) < 4.5 do
@@ -2482,7 +2580,7 @@ function Coffee.brewBatchAndDrink(tasksToTry)
     if brewedId then
         Coffee.pullAndDrink(brewedId)
     elseif State.EnabledAutoEquip then
-        task.delay(0.15, RodSys.equip)
+        task.delay(0.2, RodSys.equip)
     end
 end
 
@@ -2506,16 +2604,14 @@ function Coffee.evaluate()
     end
 
     c.LastAttemptAt = now
-    local candidates = Coffee.getCandidateOrder()
 
-    for _, cid in ipairs(candidates) do
-        local tool = Coffee.findHeldOrBackpackTool(cid)
-        if tool then
-            task.spawn(Coffee.pullAndDrink, cid)
-            return
-        end
+    local existingTool, existingId = Coffee.findHeldOrBackpackTool(nil)
+    if existingTool then
+        task.spawn(Coffee.pullAndDrink, existingId)
+        return
     end
 
+    local candidates = Coffee.getCandidateOrder()
     for _, cid in ipairs(candidates) do
         if Coffee.getInvCount(cid) > 0 then
             task.spawn(Coffee.pullAndDrink, cid)
@@ -2527,10 +2623,9 @@ function Coffee.evaluate()
         return
     end
 
-    local cc = Cfg.coffee()
-    local reqLvl = (cc and cc.RequireLevel) or 120
+    local cc = Cfg.syncCoffeeCache()
     local curLvl = Monitor.readLevelXp()
-    if curLvl and curLvl < reqLvl then
+    if cc and cc.RequireLevel and curLvl and curLvl < cc.RequireLevel then
         return
     end
 
@@ -2552,130 +2647,41 @@ function Coffee.evaluate()
     end
 end
 
--- ==================== PRIMORDIAL EVENT TELEPORT & PURE-MATH SCHEDULE ====================
-function Primordial.celestraOverlapEnd(startT: number, winLen: number)
-    local baseIdx = math.floor(startT / 7200)
-    for i = baseIdx - 1, baseIdx + 1 do
-        local cs = i * 7200
-        if startT < (cs + 1800) and cs < (startT + winLen) then
-            return cs + 1800
-        end
-    end
-    return nil
-end
-
-function Primordial.thalvyraWindowStart(idx: number)
-    local t = idx * 14400 + 3600
-    for _ = 1, 3 do
-        local ov = Primordial.celestraOverlapEnd(t, 1800)
-        if not ov then
-            break
-        end
-        t = ov + 120
-    end
-    return t
-end
-
-function Primordial.computeScheduleMath(spot, nowEp: number)
-    local forcedUntil = tonumber(Svc.ReplicatedStorage:GetAttribute(spot.ForceAttr)) or 0
-    local forcedLeft = math.max(0, forcedUntil - nowEp)
-    if forcedLeft > 0 then
-        return true, forcedLeft, 0
-    end
-
-    if spot.Key == "Celestra" then
-        local phase = nowEp % 7200
-        if phase < 1800 then
-            return true, (1800 - phase), 0
-        else
-            return false, 0, (7200 - phase)
-        end
-    elseif spot.Key == "Thalvyra" then
-        local baseIdx = math.floor((nowEp - 3600) / 14400)
-        for i = baseIdx - 1, baseIdx do
-            local ws = Primordial.thalvyraWindowStart(i)
-            if ws <= nowEp and nowEp < (ws + 1800) then
-                return true, ((ws + 1800) - nowEp), 0
-            end
-        end
-        for i = baseIdx - 1, baseIdx + 2 do
-            local ws = Primordial.thalvyraWindowStart(i)
-            if nowEp < ws then
-                return false, 0, (ws - nowEp)
-            end
-        end
-        return false, 0, 14400
-    else
-        -- SoreKraken (Offset = 10800, Cycle = 14400, Window = 1800)
-        local cs = math.floor((nowEp - 10800) / 14400) * 14400 + 10800
-        if cs <= nowEp and nowEp < (cs + 1800) then
-            return true, ((cs + 1800) - nowEp), 0
-        end
-        local ns = (math.floor((nowEp - 10800) / 14400) + 1) * 14400 + 10800
-        return false, 0, math.max(0, ns - nowEp)
-    end
-end
-
-function Primordial.readWorkspaceSign(spot)
+-- ==================== PRIMORDIAL EVENT TELEPORT MODULE ====================
+function Primordial.readSignTexts(spot)
     local folder = workspace:FindFirstChild(spot.SignFolder)
     local part = folder and folder:FindFirstChild(spot.SignPart, true)
-    local sign = part and part:FindFirstChild(spot.SignName)
-    if sign and sign:IsA("BillboardGui") and sign.Enabled then
-        local card = sign:FindFirstChild("Card")
-        local statusLbl = card and card:FindFirstChild("Status")
-        local timeLbl = card and card:FindFirstChild("Time")
-        local statusTxt = (statusLbl and statusLbl:IsA("TextLabel")) and (statusLbl.ContentText or statusLbl.Text) or ""
-        local timeTxt = (timeLbl and timeLbl:IsA("TextLabel")) and (timeLbl.ContentText or timeLbl.Text) or ""
-        if statusTxt ~= "" or timeTxt ~= "" then
-            return statusTxt, timeTxt
-        end
+    local signGui = part and part:FindFirstChild(spot.SignGui)
+    local card = signGui and signGui:FindFirstChild("Card")
+    if not card then
+        return nil, nil
     end
-    return nil, nil
-end
-
-function Primordial.getSchedule(spot)
-    local nowEp = Util.serverNow()
-    local cfg = Cfg[spot.CfgFunc]()
-    if cfg and type(cfg.isActive) == "function" then
-        local okA, resA = pcall(function()
-            return cfg.isActive(nowEp)
-        end)
-        if okA and type(resA) == "boolean" then
-            if resA then
-                local okL, leftVal = pcall(function()
-                    return cfg.secondsLeft(nowEp)
-                end)
-                return true, ((okL and type(leftVal) == "number") and leftVal or 0), 0
-            else
-                local okU, untilVal = pcall(function()
-                    return cfg.secondsUntil(nowEp)
-                end)
-                return false, 0, ((okU and type(untilVal) == "number") and untilVal or 0)
-            end
-        end
+    local timeLbl = card:FindFirstChild("Time")
+    local statusLbl = card:FindFirstChild("Status")
+    local timeTxt = (timeLbl and (timeLbl:IsA("TextLabel") or timeLbl:IsA("TextButton"))) and ((timeLbl.ContentText ~= "" and timeLbl.ContentText) or timeLbl.Text) or nil
+    local statusTxt = (statusLbl and (statusLbl:IsA("TextLabel") or statusLbl:IsA("TextButton"))) and ((statusLbl.ContentText ~= "" and statusLbl.ContentText) or statusLbl.Text) or nil
+    if timeTxt == "" then
+        timeTxt = nil
     end
-    return Primordial.computeScheduleMath(spot, nowEp)
-end
-
-function Primordial.chanceFallback(spot, totalLuck: number)
-    local cfg = Cfg[spot.CfgFunc]()
-    if cfg and type(cfg.chance) == "function" then
-        local okC, bProb = pcall(function()
-            return cfg.chance(totalLuck)
-        end)
-        if okC and type(bProb) == "number" and bProb > 0 then
-            return bProb
-        end
+    if statusTxt == "" then
+        statusTxt = nil
     end
-    local v1 = math.log(9)
-    local v2 = math.log(70)
-    local v3 = math.clamp((math.log(math.max(totalLuck, 1)) - v1) / (v2 - v1), 0, 1)
-    local celChance = CONST.PRIMORDIAL_BASE_MIN + (CONST.PRIMORDIAL_BASE_MAX - CONST.PRIMORDIAL_BASE_MIN) * v3
-    return celChance * (spot.Difficulty or 1)
+    return timeTxt, statusTxt
 end
 
 function Primordial.isSpotActive(spot)
-    local active = Primordial.getSchedule(spot)
+    local nowEp = Util.serverNow()
+    local active = false
+
+    local cfg = Cfg.get(spot.CfgName)
+    if cfg and type(cfg.isActive) == "function" then
+        local okA, res = pcall(function()
+            return cfg.isActive(nowEp)
+        end)
+        if okA and res == true then
+            active = true
+        end
+    end
 
     if not active then
         local stMod = Cfg.sharedMod(spot.StateName)
@@ -2686,13 +2692,6 @@ function Primordial.isSpotActive(spot)
             if okS and resS == true then
                 active = true
             end
-        end
-    end
-
-    if not active then
-        local statusTxt = Primordial.readWorkspaceSign(spot)
-        if statusTxt and string.find(statusTxt, "is here", 1, true) then
-            active = true
         end
     end
 
@@ -2712,21 +2711,9 @@ function Primordial.isSpotActive(spot)
     return active
 end
 
-function Primordial.isRodAllowedFallback(rodName: string, cfg)
-    if cfg and type(cfg.rodAllowed) == "function" then
-        local okR, resR = pcall(function()
-            return cfg.rodAllowed(rodName)
-        end)
-        if okR then
-            return resR == true
-        end
-    end
-    return CONST.SUPREMACY_RODS[rodName] == true
-end
-
 function Primordial.hasEligibleRodInUI(cfg)
     local rcCont = RodSys.getContentContainer()
-    if not rcCont then
+    if not rcCont or type(cfg.rodAllowed) ~= "function" then
         return false
     end
     for _, entry in ipairs(rcCont:GetChildren()) do
@@ -2734,7 +2721,10 @@ function Primordial.hasEligibleRodInUI(cfg)
             local lower = string.lower(entry.Name)
             if lower ~= "template" and lower ~= "example" and lower ~= "placeholder" then
                 local rName = entry:GetAttribute("RodName") or entry.Name
-                if Primordial.isRodAllowedFallback(rName, cfg) then
+                local okU, resU = pcall(function()
+                    return cfg.rodAllowed(rName)
+                end)
+                if okU and resU == true then
                     return true
                 end
             end
@@ -2748,37 +2738,48 @@ function Primordial.isSpotEligible(spot, curLvl, gear)
         return false, "Snapback cooldown"
     end
 
+    local cfg = Cfg.get(spot.CfgName)
+    if not cfg then
+        return false, "Config loading"
+    end
+
     if State.Primordial.CheckUnlocks and spot.UnlockAttr then
         if LocalPlayer:GetAttribute(spot.UnlockAttr) ~= true then
             return false, "Not Unlocked"
         end
     end
 
-    local cfg = Cfg[spot.CfgFunc]()
-    local reqLvl = (cfg and cfg.RequireLevel) or spot.RequireLevel or 0
+    local reqLvl = cfg.RequireLevel or 0
     if curLvl and curLvl < reqLvl then
         return false, "Need Lv." .. reqLvl
     end
 
-    if not Primordial.isRodAllowedFallback(gear.RodName, cfg) then
-        local hasAllowed = false
-        local bp = LocalPlayer:FindFirstChild("Backpack")
-        if bp then
-            for _, item in ipairs(bp:GetChildren()) do
-                if RodSys.isRod(item) then
-                    local rName = item:GetAttribute("RodName") or item.Name
-                    if Primordial.isRodAllowedFallback(rName, cfg) then
-                        hasAllowed = true
-                        break
+    if type(cfg.rodAllowed) == "function" then
+        local okR, rodAllowed = pcall(function()
+            return cfg.rodAllowed(gear.RodName)
+        end)
+        if okR and not rodAllowed then
+            local hasAllowed = false
+            local bp = LocalPlayer:FindFirstChild("Backpack")
+            if bp then
+                for _, item in ipairs(bp:GetChildren()) do
+                    if RodSys.isRod(item) then
+                        local okB, resB = pcall(function()
+                            return cfg.rodAllowed(item:GetAttribute("RodName") or item.Name)
+                        end)
+                        if okB and resB then
+                            hasAllowed = true
+                            break
+                        end
                     end
                 end
             end
-        end
-        if not hasAllowed then
-            hasAllowed = Primordial.hasEligibleRodInUI(cfg)
-        end
-        if not hasAllowed then
-            return false, "Need Supremacy Rod"
+            if not hasAllowed then
+                hasAllowed = Primordial.hasEligibleRodInUI(cfg)
+            end
+            if not hasAllowed then
+                return false, "Need Supremacy Rod"
+            end
         end
     end
 
@@ -2912,11 +2913,19 @@ function Primordial.teleportTo(targetCF, spot)
                         task.delay(0.8, Coffee.evaluate)
                     end
 
-                    local _, leftSec = Primordial.getSchedule(spot)
+                    local cfg = Cfg.get(spot.CfgName)
+                    local leftSec = (cfg and type(cfg.secondsLeft) == "function") and cfg.secondsLeft(Util.serverNow()) or 0
                     local gear = Monitor.getGearSummary(true)
-                    local bProb = Primordial.chanceFallback(spot, gear.TotalLuck)
-                    local rb = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[spot.Name]) or 0
-                    local chStr = Util.formatOneIn(bProb * (1 + rb) * (gear.PrimordialMult or 1))
+                    local chStr = "--"
+                    if cfg and type(cfg.chance) == "function" then
+                        local okC, bProb = pcall(function()
+                            return cfg.chance(gear.TotalLuck)
+                        end)
+                        if okC and type(bProb) == "number" and bProb > 0 then
+                            local rb = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[spot.Name]) or 0
+                            chStr = Util.formatOneIn(bProb * (1 + rb) * (gear.PrimordialMult or 1))
+                        end
+                    end
 
                     if UI.Window then
                         UI.Window:Notify({ title = "Primordial Event!", content = string.format("Teleported to %s (%s left)", spot.Name, Util.formatDur(leftSec)), duration = 4 })
@@ -2933,7 +2942,6 @@ function Primordial.teleportTo(targetCF, spot)
                             if dist > 60 then
                                 p.BlockedUntil[spot.Key] = os.clock() + 120
                                 p.CurrentEvent = nil
-                                warn(string.format("[Auto Fish] Snapback detected at %s (dist %.1f). Skipping for 120s.", spot.Name, dist))
                                 Webhook.alert("Primordial Snapback", string.format("Server moved player away from %s. Skipping for 2m.", spot.Name), CONST.RARITY_COLORS.Alert)
                             end
                         end
@@ -3038,13 +3046,13 @@ function PrimHud.create()
         return
     end
 
-    local old = parentContainer:FindFirstChild("SaujanaPrimordialHUD")
+    local old = parentContainer:FindFirstChild("HUD_TimerPanel")
     if old then
         old:Destroy()
     end
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "SaujanaPrimordialHUD"
+    gui.Name = "HUD_TimerPanel"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.DisplayOrder = 15
@@ -3132,7 +3140,7 @@ function PrimHud.create()
         row.TextXAlignment = Enum.TextXAlignment.Left
         row.TextTruncate = Enum.TextTruncate.AtEnd
         row.TextColor3 = Color3.fromRGB(205, 214, 232)
-        row.Text = CONST.PRIMORDIAL_SPOTS[key].Name .. ": Loading..."
+        row.Text = CONST.PRIMORDIAL_SPOTS[key].Name .. ": Syncing..."
         row.Parent = main
         UI.HudRows[key] = row
     end
@@ -3146,7 +3154,7 @@ function PrimHud.create()
     footer.TextXAlignment = Enum.TextXAlignment.Left
     footer.TextTruncate = Enum.TextTruncate.AtEnd
     footer.TextColor3 = Color3.fromRGB(145, 162, 192)
-    footer.Text = "Rate: 0/hr • Coffee: --"
+    footer.Text = "Rate: 0/hr • Boost: --"
     footer.Parent = main
     UI.HudFooter = footer
 
@@ -3218,7 +3226,7 @@ function RodSys.isRod(tool)
     if tool:GetAttribute("FishRod") or tool:GetAttribute("RodName") ~= nil or tool:GetAttribute("SkinName") ~= nil then
         return true
     end
-    local rc = Cfg.rod()
+    local rc = Cfg.get("RodConfig")
     if rc and type(rc.Rods) == "table" and rc.Rods[tool.Name] ~= nil then
         return true
     end
@@ -3232,7 +3240,7 @@ end
 
 function RodSys.score(rodName, obj)
     local score = 1
-    local rc = Cfg.rod()
+    local rc = Cfg.get("RodConfig")
     if rc and type(rc.get) == "function" and type(rodName) == "string" then
         local info = rc.get(rodName)
         if info and type(info.Luck) == "number" then
@@ -3303,7 +3311,7 @@ function RodSys.findBestContentTarget()
         return nil, nil, -1
     end
 
-    local rc = Cfg.rod()
+    local rc = Cfg.get("RodConfig")
     Cfg.rodSkin()
     local bestTarget, bestScore = nil, -1
     for _, entry in ipairs(rcCont:GetChildren()) do
@@ -3613,16 +3621,16 @@ function Binder.isRemoteValid(r)
 end
 
 function Binder.resolveAllConfigs()
-    Cfg.fish()
-    Cfg.rod()
+    Cfg.get("FishConfig")
+    Cfg.get("RodConfig")
     Cfg.rodSkin()
-    Cfg.bait()
-    Cfg.enhance()
-    Cfg.level()
-    Cfg.celestra()
-    Cfg.thalvyra()
-    Cfg.soreKraken()
-    Cfg.coffee()
+    Cfg.get("BaitConfig")
+    Cfg.get("RodEnhanceConfig")
+    Cfg.get("LevelConfig")
+    Cfg.get("CelestraConfig")
+    Cfg.get("ThalvyraConfig")
+    Cfg.get("SoreKrakenConfig")
+    Cfg.syncCoffeeCache()
     Cfg.sharedMod("CelestraState")
     Cfg.sharedMod("ThalvyraState")
     Cfg.sharedMod("SoreKrakenState")
@@ -3806,7 +3814,7 @@ function Engine.slowTick(now)
         State.BiteActive = false
         State.BiteHasReeled = false
     end
-    if State.Coffee.IsDrinking and (now - State.Coffee.DrinkStartedAt) >= 12 then
+    if State.Coffee.IsDrinking and (now - State.Coffee.DrinkStartedAt) >= 14 then
         State.Coffee.IsDrinking = false
         Coffee.syncHeldFlag()
     end
@@ -3954,18 +3962,29 @@ function Engine.updateLoop()
     end
 end
 
--- ==================== RAYFIELD UI CREATION (SCOPED PER TAB) ====================
+-- ==================== RAYFIELD GEN2 UI (SIDEBAR + GRID + PROGRESS + TAG) ====================
 UI.Window = Rayfield:CreateWindow({
-    name = "Auto Fish",
-    subtitle = string.format("v%s • Place %d", SCRIPT_VERSION, game.PlaceId),
+    name = "Saujana Hub",
+    subtitle = "v" .. SCRIPT_VERSION,
+    sidebarLayout = true,
     theme = "cobalt",
-    configuration = { autoSave = true, autoLoad = false, fileName = "AutoFishConfig" },
+    configuration = { autoSave = true, autoLoad = false, fileName = "SaujanaFishGen2" },
 })
 
+if type(UI.Window.CreateTag) == "function" then
+    local okTag, tagHandle = pcall(function()
+        return UI.Window:CreateTag({ text = "ACTIVE", color = Color3.fromRGB(34, 197, 94) })
+    end)
+    if okTag and tagHandle then
+        UI.StatusTag = tagHandle
+    end
+end
+
 do
-    local AutoTab = UI.Window:CreateTab({ name = "Automation" })
-    AutoTab:CreateSection({ name = "Casting & Events" })
-    UI.AutoCastToggle = AutoTab:CreateToggle({
+    local FarmTab = UI.Window:CreateTab({ name = "Farming" })
+
+    FarmTab:CreateSection({ name = "Core Automation" })
+    UI.AutoCastToggle = FarmTab:CreateToggle({
         name = "Auto Cast",
         description = "Casts automatically between catches",
         flag = "AutoCast",
@@ -3975,60 +3994,9 @@ do
             Engine.updateLoop()
         end,
     })
-    AutoTab:CreateToggle({
-        name = "Pause Away From Water",
-        description = "Automatically pauses farming when you move away from water",
-        flag = "PauseAwayFromWater",
-        value = true,
-        callback = function(v)
-            State.EnabledPauseNoWater = v
-            Water.refresh(false, true)
-        end,
-    })
-    UI.PrimordialToggle = AutoTab:CreateToggle({
-        name = "Auto TP Primordial Events",
-        description = "Waits for active catch to finish, teleports & returns afterward",
-        flag = "AutoTpPrimordial",
-        value = true,
-        callback = function(v)
-            State.Primordial.Enabled = v
-            Engine.updateLoop()
-            if v then
-                task.defer(Primordial.evaluate)
-            elseif State.Primordial.CurrentEvent and State.Primordial.ReturnHome and State.Primordial.HomeCFrame then
-                Primordial.teleportTo(State.Primordial.HomeCFrame, nil)
-            end
-        end,
-    })
-    UI.AutoCoffeeToggle = AutoTab:CreateToggle({
-        name = "Auto Coffee Boost",
-        description = "Pulls from Backpack/brews & drinks Coffee automatically",
-        flag = "AutoCoffeeBoost",
-        value = true,
-        callback = function(v)
-            State.Coffee.Enabled = v
-            Engine.updateLoop()
-            if v then
-                task.defer(Coffee.evaluate)
-            end
-        end,
-    })
-    UI.GameAutoCastToggle = AutoTab:CreateToggle({
-        name = "Game Auto Cast",
-        description = "Optional built-in auto cast (keep OFF for faster 0.06s/tap speed)",
-        flag = "GameAutoCast",
-        value = false,
-        callback = function(v)
-            State.EnabledGameAutoCast = v
-            Engine.updateLoop()
-            GameAuto.set(v)
-        end,
-    })
-
-    AutoTab:CreateSection({ name = "Reeling & Clicking" })
-    UI.FastSafeReelToggle = AutoTab:CreateToggle({
+    UI.FastSafeReelToggle = FarmTab:CreateToggle({
         name = "Fast Safe Reel",
-        description = "Reels at earliest safe server time from FishConfig (Auto-Tunes on fails)",
+        description = "Reels at earliest safe server time (auto-tunes on fails)",
         flag = "FastSafeReel",
         value = true,
         callback = function(v)
@@ -4036,40 +4004,9 @@ do
             Engine.updateLoop()
         end,
     })
-    AutoTab:CreateToggle({
-        name = "Auto Clicker",
-        description = "Clicks automatically during active fishing bites",
-        flag = "AutoClicker",
-        value = false,
-        callback = function(v)
-            State.EnabledClick = v
-            Engine.updateLoop()
-        end,
-    })
-    AutoTab:CreateToggle({
-        name = "Auto Reel",
-        description = "Reels when progress reaches the Reel At target",
-        flag = "AutoReel",
-        value = false,
-        callback = function(v)
-            State.EnabledReel = v
-            Engine.updateLoop()
-        end,
-    })
-    UI.ColorReelToggle = AutoTab:CreateToggle({
-        name = "Color Reel",
-        description = "Reels when the fill bar turns green (starts OFF; guarded by Fast Safe Reel)",
-        flag = "ColorReel",
-        value = false,
-        callback = function(v)
-            State.EnabledColorReel = v
-        end,
-    })
-
-    AutoTab:CreateSection({ name = "Equipment, UI & Economy" })
-    AutoTab:CreateToggle({
+    FarmTab:CreateToggle({
         name = "Auto Equip Rod",
-        description = "Equips best rod (yields cleanly while drinking Coffee)",
+        description = "Equips your best rod (yields cleanly while drinking Coffee)",
         flag = "AutoEquipRod",
         value = true,
         callback = function(v)
@@ -4079,9 +4016,19 @@ do
             end
         end,
     })
-    AutoTab:CreateToggle({
+    FarmTab:CreateToggle({
+        name = "Pause Away From Water",
+        description = "Pauses casting if you walk away from water",
+        flag = "PauseAwayFromWater",
+        value = true,
+        callback = function(v)
+            State.EnabledPauseNoWater = v
+            Water.refresh(false, true)
+        end,
+    })
+    FarmTab:CreateToggle({
         name = "Auto Close LevelUp UI",
-        description = "Automatically dismisses the LevelUpUI popup when leveling up",
+        description = "Dismisses the LevelUpUI popup automatically",
         flag = "AutoCloseLevelUp",
         value = true,
         callback = function(v)
@@ -4094,9 +4041,9 @@ do
             end
         end,
     })
-    AutoTab:CreateToggle({
+    FarmTab:CreateToggle({
         name = "Auto Sell",
-        description = "Sells all fish on an interval (plus instant sell if bag is full)",
+        description = "Sells fish on interval (plus instant sell when bag is full)",
         flag = "AutoSell",
         value = false,
         callback = function(v)
@@ -4107,13 +4054,97 @@ do
             Engine.updateLoop()
         end,
     })
+
+    if type(FarmTab.CreateDivider) == "function" then
+        pcall(function()
+            FarmTab:CreateDivider()
+        end)
+    end
+
+    FarmTab:CreateSection({ name = "Events & Boosts" })
+    UI.PrimordialToggle = FarmTab:CreateToggle({
+        name = "Auto TP Primordial Events",
+        description = "Waits for active catch, teleports to event & returns home",
+        flag = "AutoTpPrimordial",
+        value = true,
+        callback = function(v)
+            State.Primordial.Enabled = v
+            Engine.updateLoop()
+            if v then
+                task.defer(Primordial.evaluate)
+            elseif State.Primordial.CurrentEvent and State.Primordial.ReturnHome and State.Primordial.HomeCFrame then
+                Primordial.teleportTo(State.Primordial.HomeCFrame, nil)
+            end
+        end,
+    })
+    UI.AutoCoffeeToggle = FarmTab:CreateToggle({
+        name = "Auto Coffee Boost",
+        description = "Drinks 1 Coffee from inventory or brews via ticket/fish",
+        flag = "AutoCoffeeBoost",
+        value = true,
+        callback = function(v)
+            State.Coffee.Enabled = v
+            Engine.updateLoop()
+            if v then
+                task.defer(Coffee.evaluate)
+            end
+        end,
+    })
+    UI.GameAutoCastToggle = FarmTab:CreateToggle({
+        name = "Game Auto Cast",
+        description = "Built-in auto cast (keep OFF for faster 0.06s/tap speed)",
+        flag = "GameAutoCast",
+        value = false,
+        callback = function(v)
+            State.EnabledGameAutoCast = v
+            Engine.updateLoop()
+            GameAuto.set(v)
+        end,
+    })
+
+    if type(FarmTab.CreateDivider) == "function" then
+        pcall(function()
+            FarmTab:CreateDivider()
+        end)
+    end
+
+    FarmTab:CreateSection({ name = "Fallback Reeling" })
+    FarmTab:CreateToggle({
+        name = "Auto Clicker",
+        description = "Clicks automatically during active bites",
+        flag = "AutoClicker",
+        value = false,
+        callback = function(v)
+            State.EnabledClick = v
+            Engine.updateLoop()
+        end,
+    })
+    FarmTab:CreateToggle({
+        name = "Auto Reel",
+        description = "Reels when progress hits the Reel At target",
+        flag = "AutoReel",
+        value = false,
+        callback = function(v)
+            State.EnabledReel = v
+            Engine.updateLoop()
+        end,
+    })
+    UI.ColorReelToggle = FarmTab:CreateToggle({
+        name = "Color Reel",
+        description = "Reels when bar turns green (starts OFF)",
+        flag = "ColorReel",
+        value = false,
+        callback = function(v)
+            State.EnabledColorReel = v
+        end,
+    })
 end
 
 do
-    local function safeStat(tab, opts)
-        if tab and type(tab.CreateStat) == "function" then
+    local function safeStat(parent, opts)
+        if parent and type(parent.CreateStat) == "function" then
             local okS, h = pcall(function()
-                return tab:CreateStat(opts)
+                return parent:CreateStat(opts)
             end)
             if okS and h then
                 return h
@@ -4140,31 +4171,73 @@ do
         return nil
     end
 
-    local MonTab = UI.Window:CreateTab({ name = "Rate Monitor" })
-    MonTab:CreateSection({ name = "Live Overview" })
-    UI.StatFishHr = safeStat(MonTab, { name = "Fish / Hour (Live)", value = 0, numberEasing = false })
-    UI.StatXpHr = safeStat(MonTab, { name = "XP / Hour", value = 0, numberEasing = false })
-    UI.StatCaught = safeStat(MonTab, { name = "Session Caught", value = 0, numberEasing = false })
-    UI.StatLevel = safeStat(MonTab, { name = "Current Level", value = 0, numberEasing = false })
+    local MonTab = UI.Window:CreateTab({ name = "Monitor" })
+    MonTab:CreateSection({ name = "Live Dashboard" })
 
-    MonTab:CreateSection({ name = "Detailed Rates & Projections" })
+    local leftCol, rightCol = MonTab, MonTab
+    if type(MonTab.CreateGroup) == "function" then
+        local okG, grid = pcall(function()
+            return MonTab:CreateGroup()
+        end)
+        if okG and grid and type(grid.CreateGroup) == "function" then
+            local okL, l = pcall(function()
+                return grid:CreateGroup({ direction = "column" })
+            end)
+            local okR, r = pcall(function()
+                return grid:CreateGroup({ direction = "column" })
+            end)
+            if okL and l and okR and r then
+                leftCol = l
+                rightCol = r
+            end
+        end
+    end
+
+    UI.StatFishHr = safeStat(leftCol, { name = "Fish / Hour", value = 0, numberEasing = false })
+    UI.StatCaught = safeStat(leftCol, { name = "Session Caught", value = 0, numberEasing = false })
+    UI.StatXpHr = safeStat(rightCol, { name = "XP / Hour", value = 0, numberEasing = false })
+    UI.StatLevel = safeStat(rightCol, { name = "Current Level", value = 0, numberEasing = false })
+
+    if type(MonTab.CreateProgress) == "function" then
+        local okPr, prHandle = pcall(function()
+            return MonTab:CreateProgress({ name = "Level Progress", range = { 0, 100 }, value = 0, suffix = "%" })
+        end)
+        if okPr and prHandle then
+            UI.LevelProgress = prHandle
+        end
+    end
+
+    if type(MonTab.CreateDivider) == "function" then
+        pcall(function()
+            MonTab:CreateDivider()
+        end)
+    end
+
+    MonTab:CreateSection({ name = "Telemetry & Projections" })
     UI.ParaRate = safePara(MonTab, "Fishing Efficiency & Fails", "Waiting for first catch...")
     UI.ParaGear = safePara(MonTab, "Active Gear, Luck & Coffee", "Loading gear configs...")
     UI.ParaXp = safePara(MonTab, "XP & Level Estimates", "Calculating...")
-    UI.ParaPrimordial = safePara(MonTab, "Primordial Windows", "Checking Celestra / Thalvyra / Sore Kraken...")
+    UI.ParaPrimordial = safePara(MonTab, "Primordial Windows", "Syncing event schedules...")
     UI.ParaRarity = safePara(MonTab, "Rarity Breakdown", "No catches yet.")
+
+    if type(MonTab.CreateDivider) == "function" then
+        pcall(function()
+            MonTab:CreateDivider()
+        end)
+    end
+
     MonTab:CreateButton({
-        name = "Reset Rate Monitor",
+        name = "Reset Session Stats",
         callback = function()
             Monitor.reset()
-            UI.Window:Notify({ title = "Rate Monitor Reset", content = "Session statistics cleared.", duration = 2 })
+            UI.Window:Notify({ title = "Monitor Reset", content = "Session statistics cleared.", duration = 2 })
         end,
     })
 end
 
 do
     local WebTab = UI.Window:CreateTab({ name = "Webhook" })
-    WebTab:CreateSection({ name = "Discord Configuration" })
+    WebTab:CreateSection({ name = "Discord Connection" })
     WebTab:CreateInput({
         name = "Discord Webhook URL",
         value = State.Webhook.Url,
@@ -4176,7 +4249,7 @@ do
     })
     WebTab:CreateToggle({
         name = "Enable Discord Webhook",
-        description = "Auto-enables if getgenv().AutoFishWebhook is set",
+        description = "Auto-enables when getgenv().AutoFishWebhook is set",
         flag = "EnableDiscordWebhook",
         value = State.Webhook.Enabled,
         callback = function(v)
@@ -4187,10 +4260,33 @@ do
             Engine.updateLoop()
         end,
     })
+    WebTab:CreateButton({
+        name = "Send Test Webhook",
+        callback = function()
+            if not Util.isValidWebhookUrl(State.Webhook.Url) then
+                UI.Window:Notify({ title = "Invalid Webhook URL", content = "Paste a valid Discord webhook URL first.", duration = 3 })
+                return
+            end
+            task.spawn(function()
+                local embed = Webhook.buildReport("Test Stats Report (v" .. SCRIPT_VERSION .. ")", CONST.RARITY_COLORS.Report)
+                embed.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                embed.footer = { text = string.format("Saujana Hub v%s • %s", SCRIPT_VERSION, LocalPlayer.Name) }
+                local okS, info = Webhook.sendNow({ embeds = { embed } })
+                UI.Window:Notify({ title = okS and "Webhook Sent!" or "Webhook Failed", content = okS and "Check your Discord channel." or tostring(info), duration = 4 })
+            end)
+        end,
+    })
+
+    if type(WebTab.CreateDivider) == "function" then
+        pcall(function()
+            WebTab:CreateDivider()
+        end)
+    end
+
     WebTab:CreateSection({ name = "Notifications & Reports" })
     WebTab:CreateToggle({
         name = "Notify Rare Catches",
-        description = "Alerts on Mythic, Secret, Supremacy, and Primordial catches",
+        description = "Mythic, Secret, Supremacy, and Primordial drops",
         flag = "WebhookRareCatches",
         value = true,
         callback = function(v)
@@ -4199,7 +4295,7 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Primordial Teleports",
-        description = "Alerts when joining/switching/leaving Primordial events",
+        description = "Event join, switch, and return-home notifications",
         flag = "WebhookPrimordial",
         value = true,
         callback = function(v)
@@ -4208,7 +4304,7 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Connected & Disconnected",
-        description = "Alerts on script load/reconnect and server disconnect",
+        description = "Alerts on script load/reconnect and server kick",
         flag = "WebhookConnections",
         value = true,
         callback = function(v)
@@ -4216,8 +4312,17 @@ do
         end,
     })
     WebTab:CreateToggle({
+        name = "Alert on Pause / Fails",
+        description = "Alerts if away from water or 5+ Invalid fails",
+        flag = "WebhookAlerts",
+        value = true,
+        callback = function(v)
+            State.Webhook.AlertOnIssues = v
+        end,
+    })
+    WebTab:CreateToggle({
         name = "Periodic Stats Summary",
-        description = "Sends an overnight rate & progress embed on an interval",
+        description = "Sends overnight rate & progress embeds on interval",
         flag = "WebhookPeriodicReport",
         value = true,
         callback = function(v)
@@ -4239,39 +4344,15 @@ do
             State.Webhook.IntervalMinutes = v
         end,
     })
-    WebTab:CreateToggle({
-        name = "Alert on Pause / Fails",
-        description = "Sends an alert if away from water or 5+ Invalid fails",
-        flag = "WebhookAlerts",
-        value = true,
-        callback = function(v)
-            State.Webhook.AlertOnIssues = v
-        end,
-    })
-    WebTab:CreateButton({
-        name = "Send Test Webhook",
-        callback = function()
-            if not Util.isValidWebhookUrl(State.Webhook.Url) then
-                UI.Window:Notify({ title = "Invalid Webhook URL", content = "Paste a valid Discord webhook URL first.", duration = 3 })
-                return
-            end
-            task.spawn(function()
-                local embed = Webhook.buildReport("Test Stats Report (Auto Fish v" .. SCRIPT_VERSION .. ")", CONST.RARITY_COLORS.Report)
-                embed.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                embed.footer = { text = string.format("Saujana Auto Fish v%s • %s", SCRIPT_VERSION, LocalPlayer.Name) }
-                local okS, info = Webhook.sendNow({ embeds = { embed } })
-                UI.Window:Notify({ title = okS and "Webhook Sent!" or "Webhook Failed", content = okS and "Check your Discord channel." or tostring(info), duration = 4 })
-            end)
-        end,
-    })
 end
 
 do
-    local SetTab = UI.Window:CreateTab({ name = "Settings" })
-    SetTab:CreateSection({ name = "Primordial Event Settings" })
-    UI.TimerHudToggle = SetTab:CreateToggle({
+    local TuneTab = UI.Window:CreateTab({ name = "Tuning" })
+
+    TuneTab:CreateSection({ name = "Primordial & HUD" })
+    UI.TimerHudToggle = TuneTab:CreateToggle({
         name = "Primordial Timer Mini-HUD",
-        description = "Floating always-on corner timer bar with exact local open times",
+        description = "Floating corner countdown bar with exact local open times",
         flag = "PrimordialTimerHud",
         value = true,
         callback = function(v)
@@ -4279,7 +4360,7 @@ do
             PrimHud.setVisible(v)
         end,
     })
-    SetTab:CreateDropdown({
+    TuneTab:CreateDropdown({
         name = "Overlap Priority",
         description = "Rarest First: Sore Kraken > Thalvyra > Celestra",
         options = { "Rarest First", "Newest First" },
@@ -4295,7 +4376,26 @@ do
             end
         end,
     })
-    SetTab:CreateToggle({
+    TuneTab:CreateToggle({
+        name = "Auto-Swap Matching Event Rod",
+        description = "Equips Celestra/Thalvyra/Sore Kraken Rod during its event",
+        flag = "SwapEventRod",
+        value = true,
+        callback = function(v)
+            State.Primordial.SwapEventRod = v
+            RodSys.recheckBestRod()
+        end,
+    })
+    TuneTab:CreateToggle({
+        name = "Return Home After Event",
+        description = "Teleports back to your starting spot when events end",
+        flag = "ReturnHomeAfterEvent",
+        value = true,
+        callback = function(v)
+            State.Primordial.ReturnHome = v
+        end,
+    })
+    TuneTab:CreateToggle({
         name = "Check Unlock Attributes",
         description = "Optional check for NpcTalkedRevano / CrimsonUnlocked / SoreKrakenUnlocked",
         flag = "PrimordialCheckUnlocks",
@@ -4307,30 +4407,17 @@ do
             end
         end,
     })
-    SetTab:CreateToggle({
-        name = "Auto-Swap Matching Event Rod",
-        description = "Equips Celestra/Thalvyra/Sore Kraken Rod during its event if owned",
-        flag = "SwapEventRod",
-        value = true,
-        callback = function(v)
-            State.Primordial.SwapEventRod = v
-            RodSys.recheckBestRod()
-        end,
-    })
-    SetTab:CreateToggle({
-        name = "Return Home After Event",
-        description = "Teleports back to your starting spot when all events end",
-        flag = "ReturnHomeAfterEvent",
-        value = true,
-        callback = function(v)
-            State.Primordial.ReturnHome = v
-        end,
-    })
 
-    SetTab:CreateSection({ name = "Coffee Boost Settings" })
-    SetTab:CreateDropdown({
+    if type(TuneTab.CreateDivider) == "function" then
+        pcall(function()
+            TuneTab:CreateDivider()
+        end)
+    end
+
+    TuneTab:CreateSection({ name = "Coffee Boost" })
+    TuneTab:CreateDropdown({
         name = "When to Drink Coffee",
-        description = "Primordial Events Only saves boosts for Celestra / Thalvyra / Sore Kraken",
+        description = "Primordial Events Only saves boosts for Primordial windows",
         options = { "Primordial Events Only", "Always (24/7)" },
         value = "Primordial Events Only",
         flag = "CoffeeTriggerMode",
@@ -4344,9 +4431,9 @@ do
             end
         end,
     })
-    SetTab:CreateDropdown({
+    TuneTab:CreateDropdown({
         name = "Coffee Preference",
-        description = "Best Available prioritizes SaujanaSignature > LuckyShot > FortuneBrew",
+        description = "Best Available prioritizes highest tier brew",
         options = { "Best Available", "SaujanaSignature", "LuckyShot", "FortuneBrew" },
         value = "Best Available",
         flag = "CoffeePreference",
@@ -4361,18 +4448,18 @@ do
             end
         end,
     })
-    SetTab:CreateToggle({
+    TuneTab:CreateToggle({
         name = "Allow Fish Trade Brew",
-        description = "Crafts with Mythic/Secret/Supremacy fish if out of tickets (starts ON)",
+        description = "Crafts with Mythic/Secret/Supremacy fish if out of tickets",
         flag = "CoffeeAllowFishTrade",
         value = true,
         callback = function(v)
             State.Coffee.AllowFishTrade = v
         end,
     })
-    SetTab:CreateToggle({
+    TuneTab:CreateToggle({
         name = "Visit Fellicia If Far",
-        description = "Briefly teleports to Fellicia if Brew says 'Far', then returns (starts ON)",
+        description = "Briefly hops to Fellicia if Brew says 'Far', then returns",
         flag = "CoffeeVisitFellicia",
         value = true,
         callback = function(v)
@@ -4380,8 +4467,14 @@ do
         end,
     })
 
-    SetTab:CreateSection({ name = "Click & Cast Methods" })
-    SetTab:CreateDropdown({
+    if type(TuneTab.CreateDivider) == "function" then
+        pcall(function()
+            TuneTab:CreateDivider()
+        end)
+    end
+
+    TuneTab:CreateSection({ name = "Casting & Reel Timing" })
+    TuneTab:CreateDropdown({
         name = "Cast Mode",
         description = "Smart Cast pauses while waiting • Heartbeat Cast spams continuously",
         options = { "Smart Cast", "Heartbeat Cast" },
@@ -4395,22 +4488,9 @@ do
             State.WaitingForBite = false
         end,
     })
-    SetTab:CreateDropdown({
-        name = "Click Method",
-        description = "Button Signals targets TapMobile • Input Signals uses mouse/input events",
-        options = { "Button Signals", "Input Signals" },
-        value = "Button Signals",
-        flag = "ClickMethod",
-        callback = function(sel)
-            if type(sel) == "table" then
-                sel = sel[1]
-            end
-            State.ClickMethod = (sel == "Input Signals") and "Input Signals" or "Button Signals"
-        end,
-    })
-    SetTab:CreateToggle({
+    TuneTab:CreateToggle({
         name = "Smart Water Aim",
-        description = "Aims CastRemote toward nearest water / LookVector (starts ON)",
+        description = "Aims CastRemote toward detected water / LookVector",
         flag = "SmartWaterAim",
         value = true,
         callback = function(v)
@@ -4420,11 +4500,9 @@ do
             end
         end,
     })
-
-    SetTab:CreateSection({ name = "Fast Safe Reel Tuning" })
-    SetTab:CreateDropdown({
+    TuneTab:CreateDropdown({
         name = "Fast Reel Mode",
-        description = "Auto-Tune starts at 60% taps & locks to 100% if an Invalid happens",
+        description = "Auto-Tune starts at 60% taps & locks to 100% on Invalid",
         options = { "Auto-Tune (Best)", "Aggressive (60%)", "Safe (100%)" },
         value = "Auto-Tune (Best)",
         flag = "FastReelMode",
@@ -4436,16 +4514,16 @@ do
             Reel.recalcSafeTime()
         end,
     })
-    SetTab:CreateToggle({
+    TuneTab:CreateToggle({
         name = "Auto-Tune Ping Buffer",
-        description = "Bumps +0.03s & locks floor on Invalid; trims -0.01s every 25 clean catches",
+        description = "Bumps +0.03s & locks floor on Invalid; trims -0.01s per 25 clean catches",
         flag = "AutoTunePingBuffer",
         value = true,
         callback = function(v)
             State.AutoTunePingBuffer = v
         end,
     })
-    UI.PingSlider = SetTab:CreateSlider({
+    UI.PingSlider = TuneTab:CreateSlider({
         name = "Reel Ping Buffer",
         range = { 0.02, 0.50 },
         increment = 0.01,
@@ -4462,9 +4540,20 @@ do
             Reel.recalcSafeTime()
         end,
     })
-
-    SetTab:CreateSection({ name = "Timing & Thresholds" })
-    SetTab:CreateSlider({
+    TuneTab:CreateDropdown({
+        name = "Click Method",
+        description = "Button Signals targets TapMobile • Input Signals uses input events",
+        options = { "Button Signals", "Input Signals" },
+        value = "Button Signals",
+        flag = "ClickMethod",
+        callback = function(sel)
+            if type(sel) == "table" then
+                sel = sel[1]
+            end
+            State.ClickMethod = (sel == "Input Signals") and "Input Signals" or "Button Signals"
+        end,
+    })
+    TuneTab:CreateSlider({
         name = "Clicker Speed",
         range = { 0.03, 0.25 },
         increment = 0.01,
@@ -4475,7 +4564,7 @@ do
             State.ClickDelay = v
         end,
     })
-    SetTab:CreateSlider({
+    TuneTab:CreateSlider({
         name = "Reel At",
         range = { 1, 13 },
         increment = 1,
@@ -4486,7 +4575,7 @@ do
             State.ReelAt = v
         end,
     })
-    SetTab:CreateSlider({
+    TuneTab:CreateSlider({
         name = "Sell Interval",
         range = { 3, 30 },
         increment = 1,
@@ -4498,10 +4587,16 @@ do
         end,
     })
 
-    SetTab:CreateSection({ name = "Overnight / Mobile" })
-    SetTab:CreateToggle({
+    if type(TuneTab.CreateDivider) == "function" then
+        pcall(function()
+            TuneTab:CreateDivider()
+        end)
+    end
+
+    TuneTab:CreateSection({ name = "Performance" })
+    TuneTab:CreateToggle({
         name = "Battery Saver (No 3D Render)",
-        description = "Disables 3D world rendering to reduce heat/battery overnight",
+        description = "Disables 3D world rendering to cut heat & battery overnight",
         flag = "BatterySaver",
         value = false,
         callback = function(v)
@@ -4519,7 +4614,7 @@ end
 
 -- ==================== RATE MONITOR & HUD UPDATER LOOP ====================
 task.spawn(function()
-    local function setStat(h, v)
+    local function setVal(h, v)
         if h and type(h.Set) == "function" then
             pcall(function()
                 h:Set(v)
@@ -4541,19 +4636,38 @@ task.spawn(function()
     end
     local function primInfo(spotKey, curLvl, gear)
         local spot = CONST.PRIMORDIAL_SPOTS[spotKey]
-        local active, leftSec, untilSec = Primordial.getSchedule(spot)
+        local cfg = Cfg.get(spot.CfgName)
+        if not cfg then
+            local signTime = Primordial.readSignTexts(spot)
+            local fallbackTxt = signTime and (spot.ShortName .. ": " .. signTime) or (spot.ShortName .. ": Loading...")
+            return spot.Name .. ": " .. (signTime or "Config loading..."), {
+                text = fallbackTxt,
+                color = Color3.fromRGB(165, 175, 195),
+            }, false
+        end
+
+        local nowEp = Util.serverNow()
+        local active = Primordial.isSpotActive(spot)
         local tStr
         local hudText
         local hudCol
         local tag = (State.Primordial.CurrentEvent == spotKey) and " [HERE]" or ""
 
         if active then
+            local okL, left = pcall(function()
+                return cfg.secondsLeft(nowEp)
+            end)
+            local leftSec = (okL and type(left) == "number") and left or 0
             local endAt = Util.formatEtaClock(leftSec)
             local evCaught = tonumber(Svc.ReplicatedStorage:GetAttribute(spot.CaughtAttr)) or 0
             tStr = string.format("ACTIVE (%s left • ends %s • %dx)", Util.formatDur(leftSec), endAt, evCaught)
             hudText = string.format("%s%s: LIVE %s (%s)", spot.ShortName, tag, Util.formatDur(leftSec), endAt)
             hudCol = (State.Primordial.CurrentEvent == spotKey) and Color3.fromRGB(115, 255, 145) or Color3.fromRGB(255, 215, 105)
         else
+            local okU, untilS = pcall(function()
+                return cfg.secondsUntil(nowEp)
+            end)
+            local untilSec = (okU and type(untilS) == "number") and untilS or 0
             local openAt = Util.formatEtaClock(untilSec)
             tStr = string.format("Opens in %s (%s)", Util.formatDur(untilSec), openAt)
             hudText = string.format("%s: %s (%s)", spot.ShortName, Util.formatDur(untilSec), openAt)
@@ -4561,31 +4675,51 @@ task.spawn(function()
         end
 
         local _, elig = Primordial.isSpotEligible(spot, curLvl, gear)
-        local bProb = Primordial.chanceFallback(spot, gear.TotalLuck)
-        local rb = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[spot.Name]) or 0
-        local chStr = Util.formatOneIn(bProb * (1 + rb) * (gear.PrimordialMult or 1))
+        local chStr = "--"
+        if type(cfg.chance) == "function" then
+            local okC, bProb = pcall(function()
+                return cfg.chance(gear.TotalLuck)
+            end)
+            if okC and type(bProb) == "number" and bProb > 0 then
+                local rBonus = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[spot.Name]) or 0
+                chStr = Util.formatOneIn(bProb * (1 + rBonus) * (gear.PrimordialMult or 1))
+            end
+        end
 
         local fullLine = string.format("%s%s: %s  |  %s  |  %s", spot.Name, tag, tStr, chStr, elig)
         return fullLine, { text = hudText, color = hudCol }, active
     end
 
-    local okInit, _, _, _, initXp = pcall(Monitor.readLevelXp)
-    if okInit then
-        State.Monitor.StartObservedXp = initXp
-    end
+    task.wait(0.25)
+    local _, _, _, initXp = Monitor.readLevelXp()
+    State.Monitor.StartObservedXp = initXp
 
     while State.Monitor.Active do
-        local okLoop, loopErr = pcall(function()
+        pcall(function()
             local snap = Monitor.snapshot()
             local gear = Monitor.getGearSummary()
-            local lvlCfg = Cfg.level()
+            local lvlCfg = Cfg.get("LevelConfig")
             local m = State.Monitor
 
-            setStat(UI.StatFishHr, math.floor(snap.liveFishPerHr + 0.5))
-            setStat(UI.StatXpHr, math.floor(snap.xpPerHr + 0.5))
-            setStat(UI.StatCaught, m.TotalCaught)
+            setVal(UI.StatFishHr, math.floor(snap.liveFishPerHr + 0.5))
+            setVal(UI.StatXpHr, math.floor(snap.xpPerHr + 0.5))
+            setVal(UI.StatCaught, m.TotalCaught)
             if snap.curLevel then
-                setStat(UI.StatLevel, snap.curLevel)
+                setVal(UI.StatLevel, snap.curLevel)
+            end
+
+            if UI.StatusTag and type(UI.StatusTag.Set) == "function" then
+                pcall(function()
+                    if State.Primordial.CurrentEvent then
+                        UI.StatusTag:Set({ text = "EVENT", color = Color3.fromRGB(234, 179, 8) })
+                    elseif State.IsFarmPausedNoWater then
+                        UI.StatusTag:Set({ text = "PAUSED", color = Color3.fromRGB(239, 68, 68) })
+                    elseif State.EnabledCast then
+                        UI.StatusTag:Set({ text = "ACTIVE", color = Color3.fromRGB(34, 197, 94) })
+                    else
+                        UI.StatusTag:Set({ text = "IDLE", color = Color3.fromRGB(100, 116, 139) })
+                    end
+                end)
             end
 
             local locLabel = State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].Name or "Normal Spot"
@@ -4611,6 +4745,7 @@ task.spawn(function()
             ))
 
             local lvlLine, etaNext, eta10, etaRank, etaMax = "Level: Waiting for Profile HUD / Attributes", "--", "--", "--", "--"
+            local levelPct = 0
             if snap.curLevel and lvlCfg then
                 local maxL = lvlCfg.MaxLevel or 2000
                 local rInfo = type(lvlCfg.rankFor) == "function" and lvlCfg.rankFor(snap.curLevel) or nil
@@ -4618,27 +4753,16 @@ task.spawn(function()
                 local xpReq = snap.curXpReq or (type(lvlCfg.xpToNext) == "function" and lvlCfg.xpToNext(snap.curLevel) or 0)
                 local xpInto = snap.curXpInto or 0
                 if snap.curLevel >= maxL then
+                    levelPct = 100
                     lvlLine = string.format("Level: %d (MAX) • %s", snap.curLevel, rTitle)
                     etaNext, eta10, etaRank, etaMax = "MAX", "MAX", "MAX", "MAX"
                 else
-                    local pct = xpReq > 0 and ((xpInto / xpReq) * 100) or 0
-                    lvlLine = string.format("Level: %d (%s)  |  XP: %s / %s (%.1f%%)", snap.curLevel, rTitle, Util.formatNum(xpInto), Util.formatNum(xpReq), pct)
+                    levelPct = xpReq > 0 and math.clamp((xpInto / xpReq) * 100, 0, 100) or 0
+                    lvlLine = string.format("Level: %d (%s)  |  XP: %s / %s (%.1f%%)", snap.curLevel, rTitle, Util.formatNum(xpInto), Util.formatNum(xpReq), levelPct)
                     if snap.xpPerSec > 0 and snap.curTotalXp and type(lvlCfg.totalForLevel) == "function" then
-                        local okE1, n1 = pcall(function()
-                            return math.max(0, lvlCfg.totalForLevel(snap.curLevel + 1) - snap.curTotalXp)
-                        end)
-                        if okE1 and type(n1) == "number" then
-                            etaNext = Util.formatDur(n1 / snap.xpPerSec)
-                        end
-
+                        etaNext = Util.formatDur(math.max(0, lvlCfg.totalForLevel(snap.curLevel + 1) - snap.curTotalXp) / snap.xpPerSec)
                         local t10 = math.min(maxL, snap.curLevel + 10)
-                        local okE10, n10 = pcall(function()
-                            return math.max(0, lvlCfg.totalForLevel(t10) - snap.curTotalXp)
-                        end)
-                        if okE10 and type(n10) == "number" then
-                            eta10 = string.format("%s (Lv %d)", Util.formatDur(n10 / snap.xpPerSec), t10)
-                        end
-
+                        eta10 = string.format("%s (Lv %d)", Util.formatDur(math.max(0, lvlCfg.totalForLevel(t10) - snap.curTotalXp) / snap.xpPerSec), t10)
                         local nRank = nil
                         if type(lvlCfg.Ranks) == "table" then
                             for _, r in ipairs(lvlCfg.Ranks) do
@@ -4648,33 +4772,15 @@ task.spawn(function()
                                 end
                             end
                         end
-                        if nRank then
-                            local okER, nR = pcall(function()
-                                return math.max(0, lvlCfg.totalForLevel(nRank) - snap.curTotalXp)
-                            end)
-                            if okER and type(nR) == "number" then
-                                etaRank = string.format("%s (Lv %d)", Util.formatDur(nR / snap.xpPerSec), nRank)
-                            end
-                        else
-                            etaRank = "Max Rank"
-                        end
-
-                        local okEM, nM = pcall(function()
-                            return math.max(0, lvlCfg.totalForLevel(maxL) - snap.curTotalXp)
-                        end)
-                        if okEM and type(nM) == "number" then
-                            etaMax = Util.formatDur(nM / snap.xpPerSec)
-                        end
+                        etaRank = nRank and string.format("%s (Lv %d)", Util.formatDur(math.max(0, lvlCfg.totalForLevel(nRank) - snap.curTotalXp) / snap.xpPerSec), nRank) or "Max Rank"
+                        etaMax = Util.formatDur(math.max(0, lvlCfg.totalForLevel(maxL) - snap.curTotalXp) / snap.xpPerSec)
                     end
                 end
             elseif snap.xpPerSec > 0 and lvlCfg and type(lvlCfg.xpToNext) == "function" then
-                local okX1, x1 = pcall(function()
-                    return lvlCfg.xpToNext(1)
-                end)
-                if okX1 and type(x1) == "number" then
-                    etaNext = Util.formatDur(x1 / snap.xpPerSec) .. " (at Lv 1 rate)"
-                end
+                etaNext = Util.formatDur(lvlCfg.xpToNext(1) / snap.xpPerSec) .. " (at Lv 1 rate)"
             end
+
+            setVal(UI.LevelProgress, math.floor(levelPct + 0.5))
 
             setPara(UI.ParaXp, "XP & Level Estimates", string.format(
                 "%s\nSource: %s  |  Session XP: +%s (Fish: +%s)\nXP Rate: %s XP/min  |  %s XP/hr\nLevel Rate: %.2f Levels/hr\nETA Next Lv: %s  |  Next Rank: %s\nETA +10 Lvs: %s  |  Max (2000): %s",
@@ -4700,11 +4806,6 @@ task.spawn(function()
                 m.RarityCounts.Mythic or 0, m.RarityCounts.Secret or 0, m.RarityCounts.Supremacy or 0, m.RarityCounts.Primordial or 0
             ))
         end)
-
-        if not okLoop and (os.clock() - State.Monitor.LastLoopWarnAt) >= 30 then
-            State.Monitor.LastLoopWarnAt = os.clock()
-            warn("[Auto Fish Monitor] Loop error:", loopErr)
-        end
 
         task.wait(1)
     end
@@ -4761,7 +4862,6 @@ task.spawn(function()
         attempts += 1
         task.wait(attempts <= 25 and 0.25 or 1)
     end
-    print("[Auto Fish] CastRemote connected.")
     Binder.resolveAllConfigs()
     Monitor.refreshBait()
     Coffee.cacheFellicia()
@@ -4826,12 +4926,10 @@ task.delay(2.5, function()
     Webhook.connected()
 end)
 
-print(string.format("[Auto Fish v%s] Ready: Fast Safe Reel, Primordial Auto-TP, Mini-HUD, Auto Coffee, Rate Monitor & Webhook.", SCRIPT_VERSION))
-
 task.defer(function()
     UI.Window:Notify({
-        title = "Auto Fish v" .. SCRIPT_VERSION,
-        content = State.Webhook.Enabled and "Primordial TP + Mini-HUD + Coffee + Webhook Active" or "Primordial TP + Mini-HUD + Coffee Active",
+        title = "Saujana Hub v" .. SCRIPT_VERSION,
+        content = State.Webhook.Enabled and "Ready • All Systems + Webhook Active" or "Ready • All Systems Active",
         duration = 4,
     })
 end)
