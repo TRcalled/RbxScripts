@@ -1,4 +1,4 @@
-local SCRIPT_VERSION = "3.1.5"
+local SCRIPT_VERSION = "3.1.6"
 local TARGET_PLACE_ID = 89346234653070
 
 if not game:IsLoaded() then
@@ -102,6 +102,17 @@ local CONST = {
         Nightmare = 30,
     },
     PERSONAL_BOOST_IDS = { "Coin", "Exp", "Supremacy", "Primordial" },
+    FPS_ATTRS = {
+        "HideTitles",
+        "HideOtherTitles",
+        "HidePlayers",
+        "DisableEffects",
+        "DisableBlur",
+        "DisableShadow",
+        "HideOwnPet",
+        "HideOtherPets",
+        "HideWarPowerNotif",
+    },
     RARITY_RANK = {
         Common = 1,
         Uncommon = 2,
@@ -196,18 +207,6 @@ local CONST = {
         SoreKrakenHitFx = true,
         SoreAmuletFx = true,
         CoinGainFxUI = true,
-    },
-    RESTORE_GAME_GUIS = {
-        "GameUI",
-        "FishingGui",
-        "Backpack",
-        "TouchGui",
-        "FishLuckGui",
-        "NotificationsUI",
-        "ToastNotifications",
-        "FishingNotifications",
-        "ProgressHintsUI",
-        "GalatamaUI",
     },
     CONFIG_LIST = {
         "FishConfig",
@@ -434,25 +433,8 @@ do
     local gal = {
         MinLevel = 50,
         MinPlayers = 10,
-        TotalPrizeOf = 30,
-        BoardTop = 10,
         TeleportCost = 5000000,
-        Areas = { "Saujana Serenity", "Saujana Sanctuary", "Saujana Beach", "Moonveil Bridge", "Captain's Paradise" },
-        Prizes = { 20000000, 10000000, 7000000, 5000000, 4000000, 3000000, 2500000, 2000000, 1500000, 1200000 },
-        PrizeRest = 500000,
     }
-    function gal.prizeFor(rank, scale)
-        local r = math.floor(tonumber(rank) or 0)
-        local sc = tonumber(scale) or 1
-        local base = gal.Prizes[r] or (r <= gal.TotalPrizeOf and gal.PrizeRest or 0)
-        if base <= 0 then
-            return 0
-        end
-        if r == 1 then
-            return math.max(1000000, math.floor((base * sc) / 1000000 + 0.5) * 1000000)
-        end
-        return math.max(100000, math.floor((base * sc) / 100000 + 0.5) * 100000)
-    end
     Cache.Fallbacks.GalatamaConfig = gal
 
     local crys = {
@@ -1059,6 +1041,7 @@ local State: { [string]: any } = {
 
     Galatama = {
         Enabled = true,
+        RequireMinPlayers = true,
         Priority = "Galatama First",
         TpMethod = "Free Area TP (LocationConfig)",
         InEvent = false,
@@ -1288,6 +1271,23 @@ function Util.updateStatusTag()
             UI.StatusTag:Set({ text = "IDLE", color = Color3.fromRGB(100, 116, 139) })
         end
     end)
+end
+
+function Util.waitIdleCast()
+    local bWait = os.clock()
+    while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
+        task.wait(0.1)
+    end
+    if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
+        pcall(function()
+            Remotes.Cancel:FireServer()
+        end)
+        task.wait(0.15)
+    end
+    State.WaitingForBite = false
+    State.BiteActive = false
+    State.BiteHasReeled = false
+    State.ConsecutiveBusyFails = 0
 end
 
 function Util.stealthTeleport(targetCF, lookAtPos, jitterXZ)
@@ -2374,7 +2374,7 @@ function Reel.bindModalPopup(gui)
         watchChild(child)
     end
     table.insert(Conns.ModalConns, gui.ChildAdded:Connect(watchChild))
-    if (gui:IsA("LayerCollector") and gui.Enabled) then
+    if gui:IsA("LayerCollector") and gui.Enabled then
         handleShow()
     end
 end
@@ -3005,16 +3005,7 @@ function Coffee.pullAndDrink(cid)
     State.Coffee.LastAttemptAt = os.clock() + 8
 
     local okRun, drank = pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.15)
-        end
+        Util.waitIdleCast()
 
         local existingTool, existingId = Coffee.findHeldOrBackpackTool(nil)
         if existingTool then
@@ -3137,16 +3128,7 @@ function Coffee.brewBatchAndDrink(tasksToTry, syncBeforeReturn)
     local brewedId = nil
 
     pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.15)
-        end
+        Util.waitIdleCast()
 
         local needVisitFellicia = false
         local sawDailyLimit = false
@@ -3741,16 +3723,7 @@ function Quests.collectSakuraBlooms()
     local picked = 0
 
     pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.15)
-        end
+        Util.waitIdleCast()
 
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -3766,7 +3739,7 @@ function Quests.collectSakuraBlooms()
             if not State.Monitor.Active or State.InAfkServer or not char.Parent or not hrp.Parent or hum.Health <= 0 then
                 break
             end
-            if State.Galatama.Enabled and Galatama.getLiveInfo().IsLive and Galatama.isEligible() then
+            if Galatama.isReadyToJoin() then
                 break
             end
 
@@ -4023,20 +3996,7 @@ function Maze.solve(mode, isManual)
     mz.LastStatus = "Preparing..."
 
     local okRun = pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.2)
-        end
-
-        State.WaitingForBite = false
-        State.BiteActive = false
-        State.BiteHasReeled = false
+        Util.waitIdleCast()
 
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -4272,21 +4232,10 @@ function Extras.checkAqualith()
 
     ex.IsBusy = true
     ex.BusyStartedAt = now
-    local totalWished = 0
-    local totalCoins = 0
-    local totalTix = 0
+    local totalWished, totalCoins, totalTix = 0, 0, 0
 
     pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.15)
-        end
+        Util.waitIdleCast()
 
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -4439,16 +4388,7 @@ function Extras.checkDexter()
     local rewardDesc = "Nothing"
 
     pcall(function()
-        local bWait = os.clock()
-        while (State.BiteActive or State.WaitingForBite) and (os.clock() - bWait) < 10 do
-            task.wait(0.1)
-        end
-        if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-            pcall(function()
-                Remotes.Cancel:FireServer()
-            end)
-            task.wait(0.15)
-        end
+        Util.waitIdleCast()
 
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -4722,16 +4662,6 @@ function Galatama.getLiveInfo()
     }
 end
 
-function Galatama.isEligible()
-    if os.clock() < State.Galatama.BlockedUntil then
-        return false
-    end
-    local cfg = Cfg.get("GalatamaConfig")
-    local minLvl = (cfg and tonumber(cfg.MinLevel)) or 50
-    local curLvl = Monitor.readLevelXp() or tonumber(LocalPlayer:GetAttribute("Level")) or 0
-    return curLvl >= minLvl
-end
-
 function Galatama.getBox(areaName)
     if type(areaName) ~= "string" or areaName == "" then
         return nil
@@ -4775,6 +4705,75 @@ function Galatama.isInsideBox(box, pos)
     local half = box.Size / 2
     local marginY = (locCfg and tonumber(locCfg.MarginY)) or 30
     return math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and math.abs(rel.Y) <= (half.Y + marginY)
+end
+
+function Galatama.getPlayerCount(areaName, box)
+    local cfg = Cfg.get("GalatamaConfig")
+    local minLvl = (cfg and tonumber(cfg.MinLevel)) or 50
+    local boardCount = tonumber(State.Galatama.Players) or 0
+    local boxCount = 0
+
+    if box then
+        for _, plr in ipairs(Svc.Players:GetPlayers()) do
+            local pLvl = tonumber(plr:GetAttribute("Level")) or 0
+            if pLvl >= minLvl then
+                local ch = plr.Character
+                local pHrp = ch and ch:FindFirstChild("HumanoidRootPart")
+                if pHrp and Galatama.isInsideBox(box, pHrp.Position) then
+                    boxCount += 1
+                end
+            end
+        end
+    end
+
+    return math.max(boardCount, boxCount)
+end
+
+function Galatama.hasEnoughPlayers(areaName)
+    local g = State.Galatama
+    if not g.RequireMinPlayers then
+        return true
+    end
+    local cfg = Cfg.get("GalatamaConfig")
+    local minPlayers = (cfg and tonumber(cfg.MinPlayers)) or 10
+    local box = Galatama.getBox(areaName)
+    local count = Galatama.getPlayerCount(areaName, box)
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local alreadyInside = (hrp ~= nil and box ~= nil and Galatama.isInsideBox(box, hrp.Position))
+
+    if alreadyInside then
+        if g.InEvent and (os.clock() - g.JoinedAt) < 8 then
+            return true
+        end
+        return count >= minPlayers
+    end
+    return count >= math.max(1, minPlayers - 1)
+end
+
+function Galatama.isEligible(areaName)
+    if os.clock() < State.Galatama.BlockedUntil then
+        return false
+    end
+    local cfg = Cfg.get("GalatamaConfig")
+    local minLvl = (cfg and tonumber(cfg.MinLevel)) or 50
+    local curLvl = Monitor.readLevelXp() or tonumber(LocalPlayer:GetAttribute("Level")) or 0
+    if curLvl < minLvl then
+        return false
+    end
+    if areaName and not Galatama.hasEnoughPlayers(areaName) then
+        return false
+    end
+    return true
+end
+
+function Galatama.isReadyToJoin()
+    if not State.Galatama.Enabled then
+        return false
+    end
+    local info = Galatama.getLiveInfo()
+    return info.IsLive and Galatama.isEligible(info.Area)
 end
 
 function Galatama.findSafeFishingSpot(areaName, box)
@@ -4888,6 +4887,7 @@ function Galatama.onBoard(payload)
     end
     local g = State.Galatama
     local prevRank = g.MyRank
+    local prevPlayers = g.Players
     g.BoardMode = payload.mode
     g.Players = tonumber(payload.n) or 0
     g.LastBoardAt = os.clock()
@@ -4907,6 +4907,9 @@ function Galatama.onBoard(payload)
             duration = 3,
         })
     end
+    if g.Enabled and g.Players ~= prevPlayers then
+        task.defer(Coordinator.evaluate)
+    end
 end
 
 function Galatama.onNotify(payload)
@@ -4918,6 +4921,7 @@ function Galatama.onNotify(payload)
             task.defer(Coordinator.evaluate)
         end
     elseif payload.kind == "fail" or payload.kind == "cancel" then
+        State.Galatama.Players = 0
         if State.Galatama.InEvent then
             State.Galatama.InEvent = false
             Util.updateStatusTag()
@@ -5272,7 +5276,7 @@ end
 
 function Coordinator.resolveDesired()
     local galaInfo = Galatama.getLiveInfo()
-    local galaReady = State.Galatama.Enabled and galaInfo.IsLive and Galatama.isEligible()
+    local galaReady = State.Galatama.Enabled and galaInfo.IsLive and Galatama.isEligible(galaInfo.Area)
 
     local bestPrim = nil
     if State.Primordial.Enabled and State.Galatama.Priority ~= "Galatama Only" then
@@ -5308,21 +5312,7 @@ function Coordinator.resolveDesired()
 end
 
 function Coordinator.waitIdleAndSaveHome(leavingNormalSpot)
-    local waitStart = os.clock()
-    while (State.BiteActive or State.WaitingForBite) and (os.clock() - waitStart) < 12 do
-        task.wait(0.1)
-    end
-    if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-        pcall(function()
-            Remotes.Cancel:FireServer()
-        end)
-        task.wait(0.15)
-    end
-
-    State.WaitingForBite = false
-    State.BiteActive = false
-    State.BiteHasReeled = false
-    State.ConsecutiveBusyFails = 0
+    Util.waitIdleCast()
 
     local char = LocalPlayer.Character
     local curHrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -5529,16 +5519,17 @@ function Coordinator.transition(kind, data)
                 end
 
                 local gear = Monitor.getGearSummary(true)
+                local pCnt = Galatama.getPlayerCount(data.Area, box)
                 if UI.Window then
                     UI.Window:Notify({
                         title = "Galatama Joined!",
-                        content = string.format("%s • %s (%s left)", data.Area, data.Mode ~= "" and data.Mode or "Tourney", Util.formatDur(data.LeftSec)),
+                        content = string.format("%s • %s (%d plr, %s left)", data.Area, data.Mode ~= "" and data.Mode or "Tourney", pCnt, Util.formatDur(data.LeftSec)),
                         duration = 4,
                     })
                 end
                 Webhook.galatamaMagnet(
                     "Galatama Joined: " .. tostring(data.Area),
-                    string.format("Mode: **%s** (%s remaining • Prize x%.2f)\nRod: %s (%.1fx)", tostring(data.Mode), Util.formatDur(data.LeftSec), data.PrizeScale, gear.RodName, gear.TotalLuck),
+                    string.format("Mode: **%s** (%d plr • %s left • Prize x%.2f)\nRod: %s (%.1fx)", tostring(data.Mode), pCnt, Util.formatDur(data.LeftSec), data.PrizeScale, gear.RodName, gear.TotalLuck),
                     CONST.RARITY_COLORS.Galatama
                 )
 
@@ -5690,48 +5681,51 @@ function Coordinator.evaluate()
 end
 
 function Perf.applyLowestGraphics()
-    if State.Perf.LowestGraphics then
-        pcall(function()
+    local low = State.Perf.LowestGraphics
+    pcall(function()
+        if low then
             LocalPlayer:SetAttribute("GraphicsDetail", "Low")
-            LocalPlayer:SetAttribute("DisableEffects", true)
-            LocalPlayer:SetAttribute("DisableBlur", true)
-            LocalPlayer:SetAttribute("DisableShadow", true)
-            LocalPlayer:SetAttribute("HideOtherPets", true)
-            LocalPlayer:SetAttribute("HideTitles", true)
-        end)
-        pcall(function()
-            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-        end)
-        pcall(function()
-            Svc.Lighting.GlobalShadows = false
-            for _, child in ipairs(Svc.Lighting:GetChildren()) do
-                if child:IsA("BlurEffect") or child:IsA("BloomEffect") or child:IsA("SunRaysEffect") or child:IsA("DepthOfFieldEffect") then
-                    child.Enabled = false
-                elseif child:IsA("Atmosphere") then
-                    child.Haze = 0
-                    child.Glare = 0
-                end
-            end
-        end)
-        pcall(function()
-            local terrain = workspace:FindFirstChildOfClass("Terrain")
-            if terrain then
-                terrain.WaterWaveSize = 0
-                terrain.WaterWaveSpeed = 0
-                terrain.WaterReflectance = 0
-                local clouds = terrain:FindFirstChildOfClass("Clouds")
-                if clouds then
-                    clouds.Enabled = false
-                end
-            end
-        end)
-    else
-        pcall(function()
-            LocalPlayer:SetAttribute("DisableEffects", false)
-            LocalPlayer:SetAttribute("DisableBlur", false)
-            LocalPlayer:SetAttribute("DisableShadow", false)
-        end)
+        end
+        for _, attr in ipairs(CONST.FPS_ATTRS) do
+            LocalPlayer:SetAttribute(attr, low)
+        end
+    end)
+
+    if not low then
+        return
     end
+
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    pcall(function()
+        Svc.Lighting.GlobalShadows = false
+        Svc.Lighting.EnvironmentDiffuseScale = 0
+        Svc.Lighting.EnvironmentSpecularScale = 0
+        for _, child in ipairs(Svc.Lighting:GetChildren()) do
+            if child:IsA("BlurEffect") or child:IsA("BloomEffect") or child:IsA("SunRaysEffect") or child:IsA("DepthOfFieldEffect") then
+                child.Enabled = false
+            elseif child:IsA("Atmosphere") then
+                child.Haze = 0
+                child.Glare = 0
+            end
+        end
+    end)
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize = 0
+            terrain.WaterWaveSpeed = 0
+            terrain.WaterReflectance = 0
+            pcall(function()
+                terrain.Decoration = false
+            end)
+            local clouds = terrain:FindFirstChildOfClass("Clouds")
+            if clouds then
+                clouds.Enabled = false
+            end
+        end
+    end)
 end
 
 function Perf.setMusicGenre(genre, switchLive)
@@ -5760,48 +5754,6 @@ function Perf.setMusicGenre(genre, switchLive)
     end
 end
 
-function Perf.disableLoadingConnections()
-    local getConnsFn = Util.getExecutorFunc("getconnections")
-    if not getConnsFn then
-        return false
-    end
-
-    local function disableSignalFrom(sig, keyword)
-        if not sig then
-            return
-        end
-        local okC, conns = pcall(function()
-            return getConnsFn(sig)
-        end)
-        if not okC or type(conns) ~= "table" then
-            return
-        end
-        for _, conn in ipairs(conns) do
-            if conn.Function then
-                local okI, src = pcall(function()
-                    return debug.info(conn.Function, "s")
-                end)
-                if okI and type(src) == "string" and string.find(src, keyword, 1, true) then
-                    pcall(function()
-                        conn:Disable()
-                    end)
-                end
-            end
-        end
-    end
-
-    disableSignalFrom(Svc.RunService.RenderStepped, "LemonadeLoadingScreen")
-    if PlayerGui then
-        disableSignalFrom(PlayerGui.ChildAdded, "LemonadeLoadingScreen")
-        for _, child in ipairs(PlayerGui:GetChildren()) do
-            if child:IsA("ScreenGui") and child.Name ~= "LemonadeLoadingScreen" then
-                disableSignalFrom(child:GetPropertyChangedSignal("Enabled"), "LemonadeLoadingScreen")
-            end
-        end
-    end
-    return true
-end
-
 function Perf.handleLoadingScreen(gui)
     if not gui or not gui.Parent or State.Perf.LoadingHandled then
         return
@@ -5819,7 +5771,7 @@ function Perf.handleLoadingScreen(gui)
 
     task.spawn(function()
         local waitLang = os.clock()
-        while LocalPlayer:GetAttribute("LanguageLoaded") ~= true and (os.clock() - waitLang) < 2.0 do
+        while LocalPlayer:GetAttribute("LanguageLoaded") ~= true and (os.clock() - waitLang) < 3.0 do
             task.wait(0.1)
         end
 
@@ -5840,70 +5792,66 @@ function Perf.handleLoadingScreen(gui)
             pcall(function()
                 skipNow:Fire()
             end)
+        else
+            local skipBtn = gui:FindFirstChild("Skip", true)
+            if skipBtn and skipBtn:IsA("GuiButton") then
+                Util.triggerBtn(skipBtn)
+            end
         end
 
-        task.wait(0.15)
-        local cleanedHooks = Perf.disableLoadingConnections()
+        local genreSent = false
+        local gfxSent = false
+        local endWait = os.clock() + 25
 
-        if cleanedHooks then
-            pcall(function()
-                local blur = Svc.Lighting:FindFirstChild("LemonadeGraphicsBlur")
-                if blur then
-                    blur:Destroy()
+        while gui.Parent and os.clock() < endWait do
+            local langGrp = gui:FindFirstChild("LanguageGroup")
+            if langGrp and langGrp:IsA("GuiObject") and langGrp.Visible then
+                local enBtn = langGrp:FindFirstChild("en", true)
+                if enBtn then
+                    Util.triggerBtn(enBtn)
                 end
-            end)
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hrp then
-                    hrp.Anchored = false
+            end
+
+            local genGrp = gui:FindFirstChild("GenreGroup")
+            if genGrp and genGrp:IsA("GuiObject") and genGrp.Visible and not genreSent then
+                local gBtn = genGrp:FindFirstChild(State.Perf.MusicGenre, true) or genGrp:FindFirstChild("All Mix", true)
+                if gBtn then
+                    genreSent = true
+                    Util.triggerBtn(gBtn)
                 end
-                local cam = workspace.CurrentCamera
-                if cam then
-                    cam.CameraType = Enum.CameraType.Custom
-                    if hum then
-                        cam.CameraSubject = hum
+            end
+
+            local selGrp = gui:FindFirstChild("SelectGroup")
+            if selGrp and selGrp:IsA("GuiObject") and selGrp.Visible and not gfxSent then
+                local recReady = false
+                local cards = selGrp:FindFirstChild("Cards")
+                if cards then
+                    for _, card in ipairs(cards:GetChildren()) do
+                        if card:IsA("GuiButton") and card:GetAttribute("Recommended") == true then
+                            recReady = true
+                            break
+                        end
                     end
                 end
-            end)
-            if PlayerGui then
-                for _, name in ipairs(CONST.RESTORE_GAME_GUIS) do
-                    local sg = PlayerGui:FindFirstChild(name)
-                    if sg and sg:IsA("ScreenGui") then
-                        sg.Enabled = true
+                if recReady then
+                    local targetName = State.Perf.LowestGraphics and "Low" or "Medium"
+                    local gfxBtn = selGrp:FindFirstChild(targetName, true)
+                    if gfxBtn then
+                        gfxSent = true
+                        Util.triggerBtn(gfxBtn)
                     end
                 end
             end
-            pcall(function()
-                gui:Destroy()
-            end)
-        else
-            local endWait = os.clock() + 12
-            while gui.Parent and os.clock() < endWait do
-                local langGrp = gui:FindFirstChild("LanguageGroup")
-                if langGrp and langGrp:IsA("GuiObject") and langGrp.Visible then
-                    local enBtn = langGrp:FindFirstChild("en", true)
-                    if enBtn then
-                        Util.triggerBtn(enBtn)
-                    end
+
+            local warnModal = gui:FindFirstChild("WarningModal")
+            if warnModal then
+                local yesBtn = warnModal:FindFirstChild("Yes", true)
+                if yesBtn then
+                    Util.triggerBtn(yesBtn)
                 end
-                local genGrp = gui:FindFirstChild("GenreGroup")
-                if genGrp and genGrp:IsA("GuiObject") and genGrp.Visible then
-                    local gBtn = genGrp:FindFirstChild(State.Perf.MusicGenre, true)
-                    if gBtn then
-                        Util.triggerBtn(gBtn)
-                    end
-                end
-                local selGrp = gui:FindFirstChild("SelectGroup")
-                if selGrp and selGrp:IsA("GuiObject") and selGrp.Visible then
-                    local lowBtn = selGrp:FindFirstChild("Low", true)
-                    if lowBtn then
-                        Util.triggerBtn(lowBtn)
-                    end
-                end
-                task.wait(0.25)
             end
+
+            task.wait(0.2)
         end
 
         task.wait(0.25)
@@ -7019,7 +6967,6 @@ do
     FarmTab:CreateSection({ name = "Core Automation" })
     UI.AutoCastToggle = FarmTab:CreateToggle({
         name = "Auto Cast",
-        description = "Casts automatically between catches",
         flag = "AutoCast",
         value = true,
         callback = function(v)
@@ -7030,7 +6977,6 @@ do
     })
     UI.FastSafeReelToggle = FarmTab:CreateToggle({
         name = "Fast Safe Reel",
-        description = "Reels at earliest safe server time (zero-fail start + auto-trim)",
         flag = "FastSafeReel",
         value = true,
         callback = function(v)
@@ -7040,7 +6986,6 @@ do
     })
     FarmTab:CreateToggle({
         name = "Auto Equip Rod",
-        description = "Equips your best rod (yields during Coffee & Away-From-Water)",
         flag = "AutoEquipRod",
         value = true,
         callback = function(v)
@@ -7052,7 +6997,6 @@ do
     })
     FarmTab:CreateToggle({
         name = "Pause Away From Water",
-        description = "Unequips rod & pauses casting when you walk away from water",
         flag = "PauseAwayFromWater",
         value = true,
         callback = function(v)
@@ -7062,7 +7006,6 @@ do
     })
     FarmTab:CreateToggle({
         name = "Auto Sell",
-        description = "Smart sell: skips 0/max, sells early at Limit-2 & on interval",
         flag = "AutoSell",
         value = false,
         callback = function(v)
@@ -7076,7 +7019,6 @@ do
     })
     FarmTab:CreateDropdown({
         name = "Auto Favorite Rare Fish",
-        description = "Stars high-rarity fish so Auto Sell never sells them",
         options = { "Off", "Primordial Only", "Supremacy+", "Secret+", "Mythic+" },
         value = "Off",
         flag = "AutoFavoriteRarity",
@@ -7095,7 +7037,6 @@ do
     })
     UI.GameAutoCastToggle = FarmTab:CreateToggle({
         name = "Game Auto Cast",
-        description = "Built-in auto cast (keep OFF for faster 0.06s/tap speed)",
         flag = "GameAutoCast",
         value = false,
         callback = function(v)
@@ -7114,7 +7055,6 @@ do
     FarmTab:CreateSection({ name = "Magnet & Crystal Hollow" })
     UI.AutoUpgradeMagnetToggle = FarmTab:CreateToggle({
         name = "Auto Upgrade Magnet",
-        description = "Upgrades Magnet automatically when Coins & Crystals meet next level cost",
         flag = "AutoUpgradeMagnet",
         value = true,
         callback = function(v)
@@ -7128,7 +7068,6 @@ do
     })
     UI.CrystalStandbyToggle = FarmTab:CreateToggle({
         name = "Crystal Hollow Standby",
-        description = "Farms Saujana Crystal Hollow between events (Lv.90+, Tono unlocked, Wings Everlove+)",
         flag = "CrystalHollowStandby",
         value = State.Magnet.CrystalHollowStandby,
         callback = function(v)
@@ -7162,7 +7101,6 @@ do
     FarmTab:CreateSection({ name = "Cast & Reel Timing" })
     FarmTab:CreateDropdown({
         name = "Cast Mode",
-        description = "Smart Cast pauses while waiting • Heartbeat Cast spams continuously",
         options = { "Smart Cast", "Heartbeat Cast" },
         value = "Smart Cast",
         flag = "CastMode",
@@ -7176,7 +7114,6 @@ do
     })
     FarmTab:CreateToggle({
         name = "Smart Water Aim",
-        description = "Aims CastRemote toward detected water / LookVector",
         flag = "SmartWaterAim",
         value = true,
         callback = function(v)
@@ -7188,7 +7125,6 @@ do
     })
     FarmTab:CreateDropdown({
         name = "Fast Reel Mode",
-        description = "Fastest Zero-Fail starts at 100% taps + 0.03s for 0 startup fails",
         options = { "Fastest Zero-Fail (Auto)", "Safe (100%)", "Aggressive (60%)" },
         value = "Fastest Zero-Fail (Auto)",
         flag = "FastReelMode",
@@ -7206,7 +7142,6 @@ do
     })
     FarmTab:CreateToggle({
         name = "Auto-Tune Ping Buffer",
-        description = "Bumps +0.03s on Invalid; trims -0.01s per 20 clean catches down to 0.02s",
         flag = "AutoTunePingBuffer",
         value = true,
         callback = function(v)
@@ -7249,7 +7184,6 @@ do
     EventTab:CreateSection({ name = "Galatama & Primordial Events" })
     UI.GalatamaToggle = EventTab:CreateToggle({
         name = "Auto Join Galatama",
-        description = "Joins Live Galatama tournaments (Lv.50+, prioritized over Primordial by default)",
         flag = "AutoJoinGalatama",
         value = true,
         callback = function(v)
@@ -7258,9 +7192,17 @@ do
             task.defer(Coordinator.evaluate)
         end,
     })
+    EventTab:CreateToggle({
+        name = "Require 9+ Players for Galatama (Min 10)",
+        flag = "GalatamaRequireMinPlayers",
+        value = true,
+        callback = function(v)
+            State.Galatama.RequireMinPlayers = v
+            task.defer(Coordinator.evaluate)
+        end,
+    })
     UI.PrimordialToggle = EventTab:CreateToggle({
         name = "Auto TP Primordial Events",
-        description = "Stealth-teleports to active Primordial spots (waits for bite)",
         flag = "AutoTpPrimordial",
         value = true,
         callback = function(v)
@@ -7271,7 +7213,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Event Overlap Priority",
-        description = "Controls priority when Galatama & Primordial overlap (default: Galatama First)",
         options = { "Galatama First", "Primordial First", "Galatama Only" },
         value = "Galatama First",
         flag = "GalatamaPriority",
@@ -7289,7 +7230,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Galatama TP Method",
-        description = "Free Area TP saves 5M coins; Paid TP uses server teleport",
         options = { "Free Area TP (LocationConfig)", "Paid Server TP (5M) + Free Fallback", "Paid Server TP (5M) Only" },
         value = "Free Area TP (LocationConfig)",
         flag = "GalatamaTpMethod",
@@ -7306,7 +7246,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Primordial Overlap Priority",
-        description = "Rarest First: Sore Kraken > Thalvyra > Celestra",
         options = { "Rarest First", "Newest First" },
         value = "Rarest First",
         flag = "PrimordialPriority",
@@ -7320,7 +7259,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto-Swap Matching Event Rod",
-        description = "Equips Celestra/Thalvyra/Sore Kraken Rod (respects MinKg)",
         flag = "SwapEventRod",
         value = true,
         callback = function(v)
@@ -7330,7 +7268,6 @@ do
     })
     UI.ReturnHomeToggle = EventTab:CreateToggle({
         name = "Return Home After Event",
-        description = "Always starts OFF on load so you keep fishing unless returning from events",
         flag = "ReturnHomeAfterEvent",
         value = false,
         callback = function(v)
@@ -7339,7 +7276,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Check Unlock Attributes",
-        description = "Optional check for NpcTalkedRevano / CrimsonUnlocked / SoreKrakenUnlocked",
         flag = "PrimordialCheckUnlocks",
         value = false,
         callback = function(v)
@@ -7357,7 +7293,6 @@ do
     EventTab:CreateSection({ name = "Coffee Boost" })
     UI.AutoCoffeeToggle = EventTab:CreateToggle({
         name = "Auto Coffee Boost",
-        description = "Drinks Coffee or crafts only when fish/tickets are verified",
         flag = "AutoCoffeeBoost",
         value = true,
         callback = function(v)
@@ -7370,7 +7305,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "When to Drink Coffee",
-        description = "Supports Primordial, Galatama, Meteor/Winter Weather, or 24/7",
         options = { "Primordial Events Only", "Events (Galatama + Primordial)", "Events + Meteor/Winter", "Always (24/7)" },
         value = "Primordial Events Only",
         flag = "CoffeeTriggerMode",
@@ -7390,7 +7324,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Coffee Preference",
-        description = "Best Available prioritizes highest tier brew",
         options = { "Best Available", "SaujanaSignature", "LuckyShot", "FortuneBrew" },
         value = "Best Available",
         flag = "CoffeePreference",
@@ -7407,7 +7340,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Allow Fish Trade Brew",
-        description = "Crafts only after verifying un-favorited Mythic/Secret/Supremacy counts",
         flag = "CoffeeAllowFishTrade",
         value = true,
         callback = function(v)
@@ -7416,7 +7348,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Visit Fellicia If Far",
-        description = "Stealth-hops to Fellicia when brew is verified craftable, then returns",
         flag = "CoffeeVisitFellicia",
         value = true,
         callback = function(v)
@@ -7433,7 +7364,6 @@ do
     EventTab:CreateSection({ name = "Quests, Sakura & Daily Maze" })
     EventTab:CreateDropdown({
         name = "Quest Claim Mode",
-        description = "Claims Playtime, Weekly, Adventure, Sakura Event & Daily Login rewards",
         options = { "Auto-Claim & Notify", "Notify Only", "Disabled" },
         value = "Auto-Claim & Notify",
         flag = "QuestClaimMode",
@@ -7454,7 +7384,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto Claim Sakura Event (Daily + Bonus)",
-        description = "Auto-claims completed Sakura Blossom daily missions & bonus",
         flag = "AutoSakuraEvent",
         value = true,
         callback = function(v)
@@ -7466,7 +7395,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto Collect Sakura Blooms",
-        description = "Stealth-picks up to 12 daily Sakura Blooms when idle between events",
         flag = "AutoSakuraBlooms",
         value = true,
         callback = function(v)
@@ -7476,7 +7404,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto Claim Adventure Quests",
-        description = "Auto-claims completed Adventure milestones & Beginner Goals",
         flag = "AutoAdventureQuests",
         value = true,
         callback = function(v)
@@ -7488,7 +7415,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto Claim Daily Login",
-        description = "Checks DailyLoginRemotes.GetState once per UTC day",
         flag = "AutoDailyLogin",
         value = true,
         callback = function(v)
@@ -7500,7 +7426,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto-Solve Daily Maze",
-        description = "Solves Honeymoon's Daily Maze once per day (Lv.70+, skips active events)",
         flag = "AutoDailyMaze",
         value = false,
         callback = function(v)
@@ -7511,7 +7436,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Maze Finish Timing",
-        description = "Safe (+1.6s) beats game's own +1.4s timer (Daily = 1 try/day)",
         options = { "Safe (+1.6s)", "Ultra Safe (+2.2s)", "Fast (+0.9s)" },
         value = "Safe (+1.6s)",
         flag = "MazeTimingMode",
@@ -7528,7 +7452,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Visit Honeymoon If Far",
-        description = "Stealth-hops to Honeymoon Eternal if out of range, then returns",
         flag = "MazeVisitHoneymoon",
         value = true,
         callback = function(v)
@@ -7557,7 +7480,6 @@ do
     EventTab:CreateSection({ name = "Aqualith & Dexter (Optional)" })
     EventTab:CreateToggle({
         name = "Auto Aqualith Wishes",
-        description = "Wishes un-favorited Secret fish at Aqualith when idle (never uses favorites)",
         flag = "AutoAqualithWishes",
         value = false,
         callback = function(v)
@@ -7579,7 +7501,6 @@ do
     })
     EventTab:CreateToggle({
         name = "Auto Dexter Daily Gamble",
-        description = "Trades 1x/day at Minez Dexter using un-favorited fish when idle",
         flag = "AutoDexterGamble",
         value = false,
         callback = function(v)
@@ -7590,7 +7511,6 @@ do
     })
     EventTab:CreateDropdown({
         name = "Dexter Offering Type",
-        description = "3 Secret Fish is safest; never touches favorited fish",
         options = { "3 Secret Fish", "1 Supremacy Fish" },
         value = "3 Secret Fish",
         flag = "DexterOfferingType",
@@ -7617,7 +7537,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Enable Discord Webhook",
-        description = "Auto-enables when getgenv().AutoFishWebhook is set",
         flag = "EnableDiscordWebhook",
         value = State.Webhook.Enabled,
         callback = function(v)
@@ -7661,7 +7580,6 @@ do
     WebTab:CreateSection({ name = "Notifications & Reports" })
     WebTab:CreateToggle({
         name = "Notify Rare Catches",
-        description = "Mythic, Secret, Supremacy, and Primordial drops",
         flag = "WebhookRareCatches",
         value = true,
         callback = function(v)
@@ -7670,7 +7588,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Primordial Teleports",
-        description = "Event join, switch, and return-home notifications",
         flag = "WebhookPrimordial",
         value = true,
         callback = function(v)
@@ -7679,7 +7596,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Galatama, Magnet & Crystals",
-        description = "Galatama joins/results, Magnet level-ups, and Crystal drops",
         flag = "WebhookGalatamaMagnet",
         value = true,
         callback = function(v)
@@ -7688,7 +7604,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Quests, Event & Maze",
-        description = "Claimed Playtime, Weekly, Adventure, Sakura Event, Daily Login & Maze rewards",
         flag = "WebhookQuests",
         value = true,
         callback = function(v)
@@ -7697,7 +7612,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Notify Connected & Disconnected",
-        description = "Alerts on script load/reconnect and server kick",
         flag = "WebhookConnections",
         value = true,
         callback = function(v)
@@ -7706,7 +7620,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Alert on Pause / Fails / AFK",
-        description = "Alerts on water pause, 5+ Invalid fails, or AFK Server move",
         flag = "WebhookAlerts",
         value = true,
         callback = function(v)
@@ -7715,7 +7628,6 @@ do
     })
     WebTab:CreateToggle({
         name = "Periodic Stats Summary",
-        description = "Sends overnight rate & progress embeds on interval",
         flag = "WebhookPeriodicReport",
         value = true,
         callback = function(v)
@@ -7745,7 +7657,6 @@ do
     PerfTab:CreateSection({ name = "Graphics & Audio" })
     PerfTab:CreateDropdown({
         name = "Startup Music Genre",
-        description = "Auto-selected past loading screen (or getgenv().AutoFishMusicGenre)",
         options = CONST.MUSIC_GENRES,
         value = State.Perf.MusicGenre,
         flag = "StartupMusicGenre",
@@ -7758,7 +7669,6 @@ do
     })
     PerfTab:CreateToggle({
         name = "Auto-Bypass Loading Screen",
-        description = "Skips Language/Music/Graphics screens and restores game UI cleanly",
         flag = "AutoDismissLoading",
         value = true,
         callback = function(v)
@@ -7773,8 +7683,7 @@ do
         end,
     })
     PerfTab:CreateToggle({
-        name = "Lowest Graphics Mode",
-        description = "Forces Low graphics, disables shadows, blur, effects & other pets",
+        name = "Max FPS Mode (Low + Hide Players/Pets/FX)",
         flag = "LowestGraphicsMode",
         value = true,
         callback = function(v)
@@ -7784,7 +7693,6 @@ do
     })
     PerfTab:CreateToggle({
         name = "Disable Cutscenes & FX",
-        description = "Blocks Mythic/Secret/Supremacy cutscenes, camera lock & vignettes",
         flag = "DisableCutscenesFX",
         value = true,
         callback = function(v)
@@ -7793,7 +7701,6 @@ do
     })
     PerfTab:CreateToggle({
         name = "Auto Close LevelUp & Modals",
-        description = "Dismisses LevelUpUI, UpdateLogUI, BoostEventIntro, VIP & GalatamaResult popups",
         flag = "AutoCloseLevelUp",
         value = true,
         callback = function(v)
@@ -7810,7 +7717,6 @@ do
     })
     PerfTab:CreateToggle({
         name = "Battery Saver (No 3D Render)",
-        description = "Disables 3D world rendering to cut heat & battery overnight",
         flag = "BatterySaver",
         value = false,
         callback = function(v)
@@ -7830,7 +7736,6 @@ do
     PerfTab:CreateSection({ name = "Overnight Watchdog & Recovery" })
     PerfTab:CreateToggle({
         name = "Escape AFK Server",
-        description = "Rejoins Place ID if moved to an AFK Server for 20s while Auto Cast is ON",
         flag = "EscapeAfkServer",
         value = true,
         callback = function(v)
@@ -7839,7 +7744,6 @@ do
     })
     PerfTab:CreateToggle({
         name = "Standalone Auto-Rejoin on Kick",
-        description = "Auto-rejoins after 3.5s webhook flush (yields if external loader is active)",
         flag = "StandaloneAutoRejoin",
         value = true,
         callback = function(v)
@@ -7924,6 +7828,14 @@ Conns.MagnetLevel = LocalPlayer:GetAttributeChangedSignal("MagnetLevel"):Connect
 end)
 
 Conns.GalaState = Svc.ReplicatedStorage:GetAttributeChangedSignal("GalaState"):Connect(function()
+    local gs = Svc.ReplicatedStorage:GetAttribute("GalaState")
+    if gs ~= "Live" then
+        State.Galatama.Players = 0
+        State.Galatama.LastBoardAt = 0
+        State.Galatama.MyRank = nil
+        State.Galatama.MyScore = nil
+        State.Galatama.MyCatches = 0
+    end
     if State.Galatama.Enabled then
         task.defer(Coordinator.evaluate)
     end
@@ -7983,6 +7895,7 @@ State.EnabledFastSafeReel = true
 State.EnabledGameAutoCast = false
 State.EnabledSmartWaterAim = true
 State.Galatama.Enabled = true
+State.Galatama.RequireMinPlayers = true
 State.Galatama.Priority = "Galatama First"
 State.Primordial.ReturnHome = false
 State.Magnet.AutoUpgrade = true
