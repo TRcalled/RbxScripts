@@ -430,12 +430,11 @@ do
     end
     Cache.Fallbacks.SoreKrakenConfig = sk
 
-    local gal = {
+    Cache.Fallbacks.GalatamaConfig = {
         MinLevel = 50,
         MinPlayers = 10,
         TeleportCost = 5000000,
     }
-    Cache.Fallbacks.GalatamaConfig = gal
 
     local crys = {
         AreaPart = "Saujana Crystal Hollow",
@@ -1060,7 +1059,7 @@ local State: { [string]: any } = {
 
     Magnet = {
         AutoUpgrade = true,
-        CrystalHollowStandby = (envGlobal.AutoFishCrystalStandby == true),
+        CrystalHollowStandby = (envGlobal.AutoFishCrystalStandby ~= false),
         InCrystalHollow = false,
         IsUpgrading = false,
         UpgradeCooldownUntil = 0,
@@ -5787,27 +5786,33 @@ function Perf.handleLoadingScreen(gui)
             Perf.applyLowestGraphics()
         end
 
-        local skipNow = gui:FindFirstChild("SkipNow", true)
-        if skipNow and skipNow:IsA("BindableEvent") then
-            pcall(function()
-                skipNow:Fire()
-            end)
-        else
-            local skipBtn = gui:FindFirstChild("Skip", true)
-            if skipBtn and skipBtn:IsA("GuiButton") then
-                Util.triggerBtn(skipBtn)
-            end
-        end
-
+        local skipFired = false
+        local langSent = false
         local genreSent = false
         local gfxSent = false
         local endWait = os.clock() + 25
 
         while gui.Parent and os.clock() < endWait do
+            if not skipFired then
+                local skipNow = gui:FindFirstChild("SkipNow", true)
+                if skipNow and skipNow:IsA("BindableEvent") then
+                    skipFired = true
+                    pcall(function()
+                        skipNow:Fire()
+                    end)
+                else
+                    local skipBtn = gui:FindFirstChild("Skip", true)
+                    if skipBtn and skipBtn:IsA("GuiButton") then
+                        Util.triggerBtn(skipBtn)
+                    end
+                end
+            end
+
             local langGrp = gui:FindFirstChild("LanguageGroup")
-            if langGrp and langGrp:IsA("GuiObject") and langGrp.Visible then
+            if langGrp and langGrp:IsA("GuiObject") and langGrp.Visible and not langSent then
                 local enBtn = langGrp:FindFirstChild("en", true)
                 if enBtn then
+                    langSent = true
                     Util.triggerBtn(enBtn)
                 end
             end
@@ -7779,6 +7784,8 @@ if PlayerGui then
                 if State.Perf.LowestGraphics then
                     Perf.applyLowestGraphics()
                 end
+                Water.refresh(false, true)
+                Coordinator.evaluate()
             end)
         elseif c.Name == "FishingGui" then
             Cache.AutoBtn = nil
@@ -7899,6 +7906,7 @@ State.Galatama.RequireMinPlayers = true
 State.Galatama.Priority = "Galatama First"
 State.Primordial.ReturnHome = false
 State.Magnet.AutoUpgrade = true
+State.Magnet.CrystalHollowStandby = (envGlobal.AutoFishCrystalStandby ~= false)
 State.Coffee.AllowFishTrade = true
 State.Coffee.AutoVisitFellicia = true
 Engine.updateLoop()
@@ -7914,6 +7922,9 @@ if UI.GalatamaToggle and UI.GalatamaToggle.Set then
 end
 if UI.AutoUpgradeMagnetToggle and UI.AutoUpgradeMagnetToggle.Set then
     UI.AutoUpgradeMagnetToggle:Set(true)
+end
+if UI.CrystalStandbyToggle and UI.CrystalStandbyToggle.Set then
+    UI.CrystalStandbyToggle:Set(State.Magnet.CrystalHollowStandby)
 end
 if UI.GameAutoCastToggle and UI.GameAutoCastToggle.Set then
     UI.GameAutoCastToggle:Set(false)
