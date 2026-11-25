@@ -1,4 +1,4 @@
-local SCRIPT_VERSION = "3.0.0"
+local SCRIPT_VERSION = "3.1.0"
 local TARGET_PLACE_ID = 89346234653070
 
 if not game:IsLoaded() then
@@ -107,6 +107,9 @@ local CONST = {
         Secret = 0xFFD65A,
         Supremacy = 0xFF48D6,
         Primordial = 0xAAFF00,
+        Galatama = 0x38BDF8,
+        Crystal = 0x2DD4BF,
+        Magnet = 0x818CF8,
         Report = 0x3B82F6,
         Alert = 0xEF4444,
         Resume = 0x22C55E,
@@ -131,6 +134,8 @@ local CONST = {
         ["Lucky Shot"] = true,
         ["Saujana Signature"] = true,
     },
+    CRYSTAL_HOLLOW_POS = Vector3.new(-17102, 4109, -2699),
+    CRYSTAL_HOLLOW_AREA = "Saujana Crystal Hollow",
     BLOCKED_FX_GUIS = {
         FishFxGui = true,
         CelestraVignette = true,
@@ -166,6 +171,9 @@ local CONST = {
         "CelestraConfig",
         "ThalvyraConfig",
         "SoreKrakenConfig",
+        "GalatamaConfig",
+        "LocationConfig",
+        "CrystalConfig",
     },
     PRIMORDIAL_ORDER = { "SoreKraken", "Thalvyra", "Celestra" },
     PRIMORDIAL_SPOTS = {
@@ -239,7 +247,8 @@ do
         return function(luck)
             local v1 = math.log(lFloor)
             local v2 = math.log(lCap)
-            local v3 = math.clamp((math.log(math.max(tonumber(luck) or 1, 1)) - v1) / (v2 - v1), 0, 1)
+            local lVal = tonumber(luck) or 1
+            local v3 = math.clamp((math.log(math.max(lVal, 1)) - v1) / (v2 - v1), 0, 1)
             return cMin + (cMax - cMin) * v3
         end
     end
@@ -371,6 +380,84 @@ do
         return st and (st + sk.WindowSeconds - t) or 0
     end
     Cache.Fallbacks.SoreKrakenConfig = sk
+
+    local gal = {
+        MinLevel = 50,
+        MinPlayers = 10,
+        TotalPrizeOf = 30,
+        BoardTop = 10,
+        TeleportCost = 5000000,
+        Areas = { "Saujana Serenity", "Saujana Sanctuary", "Saujana Beach", "Moonveil Bridge", "Captain's Paradise" },
+        Prizes = { 20000000, 10000000, 7000000, 5000000, 4000000, 3000000, 2500000, 2000000, 1500000, 1200000 },
+        PrizeRest = 500000,
+    }
+    function gal.prizeFor(rank, scale)
+        local r = math.floor(tonumber(rank) or 0)
+        local sc = tonumber(scale) or 1
+        local base = gal.Prizes[r] or (r <= gal.TotalPrizeOf and gal.PrizeRest or 0)
+        if base <= 0 then
+            return 0
+        end
+        if r == 1 then
+            return math.max(1000000, math.floor((base * sc) / 1000000 + 0.5) * 1000000)
+        end
+        return math.max(100000, math.floor((base * sc) / 100000 + 0.5) * 100000)
+    end
+    Cache.Fallbacks.GalatamaConfig = gal
+
+    local crys = {
+        AreaPart = "Saujana Crystal Hollow",
+        UnlockLevel = 90,
+        UnlockRod = "Wings Everlove",
+        TalkAttr = "NpcTalkedTono",
+        MagnetMax = 50,
+        Order = { "Verdant", "Azure", "Amethyst" },
+        Crystals = {
+            Verdant = { Id = "Verdant", Name = "Verdant Crystal", Attr = "VerdantCrystals" },
+            Azure = { Id = "Azure", Name = "Azure Crystal", Attr = "AzureCrystals" },
+            Amethyst = { Id = "Amethyst", Name = "Amethyst Crystal", Attr = "AmethystCrystals" },
+        },
+    }
+    function crys.magnetMult(lv)
+        local n = math.floor(tonumber(lv) or 0)
+        if n <= 1 then
+            return 1
+        elseif n <= 10 then
+            return 1 + (n - 1) * 0.005
+        end
+        return 1.045 + (n - 10) * 0.023875
+    end
+    function crys.magnetCost(nextLv)
+        local lv = math.floor(tonumber(nextLv) or 0)
+        if lv < 2 or lv > crys.MagnetMax then
+            return nil
+        end
+        if lv <= 10 then
+            local coinAmt = math.floor(10 + (lv - 2) * 90 / 8 + 0.5) * 1000000
+            return { coin = coinAmt, crystals = {} }
+        end
+        local r = lv % 10
+        if r == 0 then
+            r = 10
+        end
+        local coinAmt = r * 10000000
+        local req = {}
+        if lv <= 20 then
+            req.Azure = r
+        elseif lv <= 30 then
+            req.Verdant = r
+        elseif lv <= 40 then
+            req.Amethyst = r
+        elseif lv <= 45 then
+            req.Amethyst = 5
+        else
+            req.Azure = r
+            req.Verdant = r
+            req.Amethyst = r
+        end
+        return { coin = coinAmt, crystals = req }
+    end
+    Cache.Fallbacks.CrystalConfig = crys
 end
 
 local Cfg = {}
@@ -750,6 +837,9 @@ local Remotes: { [string]: any } = {
     GetFish = nil,
     Server = nil,
     Fx = nil,
+    CrystalDrop = nil,
+    CrystalFx = nil,
+    MagnetUpgrade = nil,
     CoffeeBrew = nil,
     CoffeeHold = nil,
     CoffeeMeet = nil,
@@ -763,6 +853,10 @@ local Remotes: { [string]: any } = {
     SoreKrakenQuest = nil,
     EventGet = nil,
     EventClaim = nil,
+    GalatamaTeleport = nil,
+    GalatamaBoard = nil,
+    GalatamaNotify = nil,
+    GalatamaResult = nil,
 }
 
 local Conns: { [string]: any } = {
@@ -778,6 +872,10 @@ local Conns: { [string]: any } = {
     FishingVis = nil,
     GuiDesc = nil,
     Server = nil,
+    CrystalFx = nil,
+    GalatamaBoard = nil,
+    GalatamaNotify = nil,
+    GalatamaResult = nil,
     Heartbeat = nil,
     WorkspaceFx = nil,
     LightingFx = nil,
@@ -786,13 +884,18 @@ local Conns: { [string]: any } = {
     QuestWeekly = nil,
     EventClaimable = nil,
     InAfkServer = nil,
+    MagnetLevel = nil,
+    GalaState = nil,
 }
 
 local UI: { [string]: any } = {
     Window = nil,
     StatusTag = nil,
     AutoCastToggle = nil,
+    GalatamaToggle = nil,
     PrimordialToggle = nil,
+    AutoUpgradeMagnetToggle = nil,
+    CrystalStandbyToggle = nil,
     ReturnHomeToggle = nil,
     GameAutoCastToggle = nil,
     FastSafeReelToggle = nil,
@@ -830,6 +933,7 @@ local State: { [string]: any } = {
     BagFishCounts = nil,
     BagFishCountsAt = 0,
     LastSlowTickAt = 0,
+    LastBaitRefreshAt = 0,
     LastClickTime = 0,
     LastSellTime = 0,
     ProactiveSellCooldownUntil = 0,
@@ -880,6 +984,16 @@ local State: { [string]: any } = {
     CastPos = (typeof(vector) == "table" and vector.create) and vector.create(0, 0, 0) or Vector3.new(0, 0, 0),
     CastPower = 1,
 
+    Coordinator = {
+        IsTeleporting = false,
+        TeleportStartedAt = 0,
+        LastCheckAt = 0,
+        LastTeleportAt = 0,
+        JustTeleportedUntil = 0,
+        HomeCFrame = nil,
+        ActiveMode = "Normal",
+    },
+
     Primordial = {
         Enabled = true,
         CheckUnlocks = false,
@@ -887,14 +1001,39 @@ local State: { [string]: any } = {
         SwapEventRod = true,
         ReturnHome = false,
         CurrentEvent = nil,
-        HomeCFrame = nil,
-        IsTeleporting = false,
-        TeleportStartedAt = 0,
-        LastCheckAt = 0,
-        LastTeleportAt = 0,
         ActivatedAt = {},
         BlockedUntil = {},
         NotifUntil = {},
+    },
+
+    Galatama = {
+        Enabled = true,
+        Priority = "Galatama First",
+        TpMethod = "Free Area TP (LocationConfig)",
+        InEvent = false,
+        JoinedArea = nil,
+        JoinedAt = 0,
+        BoardMode = nil,
+        Players = 0,
+        MyRank = nil,
+        MyScore = nil,
+        MyCatches = 0,
+        LastBoardAt = 0,
+        LastAreaAdjustAt = 0,
+        BlockedUntil = 0,
+        LastWarnAt = 0,
+    },
+
+    Magnet = {
+        AutoUpgrade = true,
+        CrystalHollowStandby = (envGlobal.AutoFishCrystalStandby == true),
+        InCrystalHollow = false,
+        IsUpgrading = false,
+        UpgradeCooldownUntil = 0,
+        StandbyBlockedUntil = 0,
+        LastUpgradeCheckAt = 0,
+        WarnedTono = false,
+        SessionCrystals = { Verdant = 0, Azure = 0, Amethyst = 0 },
     },
 
     Coffee = {
@@ -962,6 +1101,7 @@ do
         Url = envValid and envUrl or "",
         NotifyRareCatches = true,
         NotifyPrimordial = true,
+        NotifyGalatamaMagnet = true,
         NotifyConnections = true,
         PeriodicReport = true,
         AlertOnIssues = true,
@@ -1018,6 +1158,10 @@ envGlobal._AutoFishCleanup = function()
     for _, k in ipairs({
         "Heartbeat",
         "Server",
+        "CrystalFx",
+        "GalatamaBoard",
+        "GalatamaNotify",
+        "GalatamaResult",
         "Gradient",
         "BarFill",
         "BarSize",
@@ -1031,6 +1175,8 @@ envGlobal._AutoFishCleanup = function()
         "QuestWeekly",
         "EventClaimable",
         "InAfkServer",
+        "MagnetLevel",
+        "GalaState",
     }) do
         if Conns[k] then
             Conns[k]:Disconnect()
@@ -1049,7 +1195,7 @@ table.insert(Conns.Global, LocalPlayer.Idled:Connect(function()
     end
 end))
 
-local Monitor, RodSys, Webhook, Water, GameAuto, Reel, Primordial, Coffee, Perf, Quests, Maze, Binder, Engine = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+local Monitor, RodSys, Webhook, Water, GameAuto, Reel, Primordial, Galatama, Magnet, Coordinator, Coffee, Perf, Quests, Maze, Binder, Engine = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
 
 function Util.updateStatusTag()
     if not UI.StatusTag or type(UI.StatusTag.Set) ~= "function" then
@@ -1058,8 +1204,12 @@ function Util.updateStatusTag()
     pcall(function()
         if State.InAfkServer then
             UI.StatusTag:Set({ text = "AFK SRV", color = Color3.fromRGB(168, 85, 247) })
+        elseif State.Galatama.InEvent then
+            UI.StatusTag:Set({ text = "GALATAMA", color = Color3.fromRGB(56, 189, 248) })
         elseif State.Primordial.CurrentEvent then
             UI.StatusTag:Set({ text = "EVENT", color = Color3.fromRGB(234, 179, 8) })
+        elseif State.Magnet.InCrystalHollow then
+            UI.StatusTag:Set({ text = "CRYSTAL", color = Color3.fromRGB(45, 212, 191) })
         elseif State.IsFarmPausedNoWater then
             UI.StatusTag:Set({ text = "PAUSED", color = Color3.fromRGB(239, 68, 68) })
         elseif State.EnabledCast then
@@ -1267,7 +1417,9 @@ function Monitor.extractRodMods(rodName, tool)
         if ascCfg and type(ascCfg.luckAt) == "function" then
             ascLuck = tonumber(ascCfg.luckAt(ascLv)) or 0
         else
-            ascLuck = math.min(ascLv, 20) * 0.25
+            local maxAsc = (ascCfg and tonumber(ascCfg.MaxLevel)) or 30
+            local perLv = (ascCfg and tonumber(ascCfg.LuckPerLevel)) or 0.25
+            ascLuck = math.min(ascLv, maxAsc) * perLv
         end
     end
 
@@ -1440,6 +1592,7 @@ function Monitor.reset()
     m.CycleTimeCount = 0
     table.clear(m.RarityCounts)
     m.FailReasons = { Invalid = 0, Lost = 0, Timeout = 0, Full = 0, Other = 0 }
+    State.Magnet.SessionCrystals = { Verdant = 0, Azure = 0, Amethyst = 0 }
     local okTot, _, _, _, tot = pcall(Monitor.readLevelXp)
     m.StartObservedXp = okTot and tot or nil
 end
@@ -1588,15 +1741,20 @@ function Webhook.buildReport(titleOverride, colorOverride)
     local locText = "Normal Spot"
     if State.InAfkServer then
         locText = "AFK Server"
+    elseif State.Galatama.InEvent then
+        locText = Galatama.getReportLine()
     elseif State.Primordial.CurrentEvent then
         local sp = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent]
         local cfg = sp and Cfg.get(sp.CfgName)
         local leftSec = (cfg and type(cfg.secondsLeft) == "function") and cfg.secondsLeft(Util.serverNow()) or 0
         local evCaught = tonumber(Svc.ReplicatedStorage:GetAttribute(sp.CaughtAttr)) or 0
         locText = string.format("%s (%s left • Server %dx)", sp.Name, Util.formatDur(leftSec), evCaught)
+    elseif State.Magnet.InCrystalHollow then
+        locText = "Crystal Hollow (Standby)"
     end
 
     local coffeeStr = Coffee.getStatusSummary()
+    local magStr = Magnet.getStatusSummary()
     local bagText = bagCnt ~= nil and string.format("%d / %d", bagCnt, bagLim) or string.format("-- / %d", bagLim)
     local ascStr = gear.AscLevel > 0 and string.format(" ★%d", gear.AscLevel) or ""
 
@@ -1624,12 +1782,19 @@ function Webhook.buildReport(titleOverride, colorOverride)
         m.RarityCounts.Primordial or 0
     )
 
+    local sc = State.Magnet.SessionCrystals
+    local crysSess = (sc.Verdant or 0) + (sc.Azure or 0) + (sc.Amethyst or 0)
+    if crysSess > 0 then
+        rarText = rarText .. string.format("\nCrystals (Sess): V:%d | A:%d | Am:%d", sc.Verdant or 0, sc.Azure or 0, sc.Amethyst or 0)
+    end
+
     return {
         title = titleOverride or "Overnight Farm Report",
         color = colorOverride or CONST.RARITY_COLORS.Report,
         fields = {
             { name = "Player & Status", value = string.format("%s (@%s)\n%s • Uptime: %s\nLocation: %s", LocalPlayer.DisplayName, LocalPlayer.Name, statusText, Util.formatClock(snap.elapsed), locText), inline = true },
             { name = "Gear, Bag & Coffee", value = string.format("%s%s • %s (Luck %.1fx)\nBag: %s • Coffee: %s", gear.RodName, ascStr, gear.BaitName, gear.TotalLuck, bagText, coffeeStr), inline = true },
+            { name = "Magnet & Crystals", value = magStr, inline = false },
             { name = "Active Boosts", value = string.format("Server: %s\nPersonal: %s", boosts.ServerSummary, boosts.PersonalSummary), inline = false },
             { name = "Catch Rates", value = string.format("Live: **%s/hr** (%.1f/m)\nAvg: %s/hr | Cycle: %.2fs", Util.formatNum(snap.liveFishPerHr), snap.liveFishPerMin, Util.formatNum(snap.sessionFishPerHr), snap.avgCycle), inline = true },
             { name = "Session Totals", value = string.format("Caught: **%s**\nFailed: %d (Inv: %d) • %.1f%%", Util.formatNum(m.TotalCaught), m.TotalFailed, m.InvalidFails, snap.successPct), inline = true },
@@ -1683,7 +1848,9 @@ function Webhook.connected()
     local shortJob = string.sub(tostring(game.JobId or "Private/Local"), 1, 12)
     local lvlStr = snap.curLevel and ("Lv. " .. tostring(snap.curLevel)) or "Loading"
     local evStr = State.InAfkServer and "AFK Server"
-        or (State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].Name or "Normal Spot")
+        or (State.Galatama.InEvent and ("Galatama: " .. tostring(State.Galatama.JoinedArea or "Live"))
+        or (State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].Name
+        or (State.Magnet.InCrystalHollow and "Crystal Hollow" or "Normal Spot")))
 
     Webhook.enqueue({
         title = "Connected / Session Online",
@@ -1702,6 +1869,14 @@ function Webhook.primordial(title, desc, color)
         return
     end
     Webhook.enqueue({ title = title, description = desc, color = color or CONST.RARITY_COLORS.Primordial })
+end
+
+function Webhook.galatamaMagnet(title, desc, color)
+    local w = State.Webhook
+    if not w.Enabled or not w.NotifyGalatamaMagnet then
+        return
+    end
+    Webhook.enqueue({ title = title, description = desc, color = color or CONST.RARITY_COLORS.Galatama })
 end
 
 function Webhook.quest(title, desc, color)
@@ -1806,8 +1981,30 @@ function Water.castDown(probePos, baseExclude)
     return nil
 end
 
+function Water.findNearestHit(originPos, maxRadius)
+    local exclude = {}
+    for _, plr in ipairs(Svc.Players:GetPlayers()) do
+        if plr.Character then
+            table.insert(exclude, plr.Character)
+        end
+    end
+    local rMax = tonumber(maxRadius) or 38
+    for radius = 3, rMax, 4.5 do
+        local steps = math.max(8, math.floor(radius * 0.7))
+        for j = 0, steps - 1 do
+            local angle = (j / steps) * (math.pi * 2)
+            local probe = originPos + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+            local hit = Water.castDown(probe, exclude)
+            if hit then
+                return hit
+            end
+        end
+    end
+    return nil
+end
+
 function Water.refresh(forceNotify, forceFullScan)
-    if State.Coffee.IsDrinking or State.Primordial.IsTeleporting or State.Maze.IsRunning or State.InAfkServer then
+    if State.Coffee.IsDrinking or State.Coordinator.IsTeleporting or State.Maze.IsRunning or State.InAfkServer then
         return
     end
 
@@ -1818,15 +2015,17 @@ function Water.refresh(forceNotify, forceFullScan)
 
     if hrp then
         local originPos = hrp.Position
-        local nearPrimSafeSpot = false
+        local nearSafeSpot = false
 
         if State.Primordial.CurrentEvent then
             local spot = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent]
             if spot and (originPos - spot.CFrame.Position).Magnitude <= 45 then
-                nearPrimSafeSpot = true
+                nearSafeSpot = true
                 State.IsNearWater = true
                 State.IsFarmPausedNoWater = false
             end
+        elseif State.Magnet.InCrystalHollow and (originPos - CONST.CRYSTAL_HOLLOW_POS).Magnitude <= 45 then
+            nearSafeSpot = true
         end
 
         local movedFar = (not State.LastWaterScanPos) or ((originPos - State.LastWaterScanPos).Magnitude >= 4)
@@ -1854,37 +2053,27 @@ function Water.refresh(forceNotify, forceFullScan)
         end
 
         if not found then
-            for radius = 3, 38, 4.5 do
-                local steps = math.max(8, math.floor(radius * 0.7))
-                for j = 0, steps - 1 do
-                    local angle = (j / steps) * (math.pi * 2)
-                    local probe = originPos + Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
-                    local hit = Water.castDown(probe, exclude)
-                    if hit then
-                        local flat = Vector3.new(hit.Position.X - originPos.X, 0, hit.Position.Z - originPos.Z)
-                        dir = flat.Magnitude > 0.5 and flat.Unit or nil
-                        found = true
-                        State.LastWaterHitPos = hit.Position
-                        break
-                    end
-                end
-                if found then
-                    break
-                end
-            end
-            if not found then
+            local nearHit = Water.findNearestHit(originPos, 38)
+            if nearHit then
+                local flat = Vector3.new(nearHit.Position.X - originPos.X, 0, nearHit.Position.Z - originPos.Z)
+                dir = flat.Magnitude > 0.5 and flat.Unit or nil
+                found = true
+                State.LastWaterHitPos = nearHit.Position
+            else
                 State.LastWaterHitPos = nil
             end
         end
 
-        if not found and nearPrimSafeSpot then
-            local spot = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent]
+        if not found and nearSafeSpot then
             found = true
-            local flatLook = Vector3.new(spot.CFrame.LookVector.X, 0, spot.CFrame.LookVector.Z)
-            if flatLook.Magnitude > 0.01 then
-                dir = flatLook.Unit
+            if State.Primordial.CurrentEvent then
+                local spot = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent]
+                local flatLook = Vector3.new(spot.CFrame.LookVector.X, 0, spot.CFrame.LookVector.Z)
+                dir = flatLook.Magnitude > 0.01 and flatLook.Unit or nil
             else
-                dir = nil
+                local lv = hrp.CFrame.LookVector
+                local flatLook = Vector3.new(lv.X, 0, lv.Z)
+                dir = flatLook.Magnitude > 0.01 and flatLook.Unit or nil
             end
         end
 
@@ -1896,7 +2085,7 @@ function Water.refresh(forceNotify, forceFullScan)
     State.CachedWaterDir = dir
 
     if State.EnabledPauseNoWater then
-        if not found and not State.IsFarmPausedNoWater then
+        if not found and now >= State.Coordinator.JustTeleportedUntil and not State.IsFarmPausedNoWater then
             State.IsFarmPausedNoWater = true
             State.WaitingForBite = false
             if not State.BiteActive then
@@ -1911,7 +2100,7 @@ function Water.refresh(forceNotify, forceFullScan)
             end
         elseif found and State.IsFarmPausedNoWater then
             State.IsFarmPausedNoWater = false
-            if State.EnabledAutoEquip then
+            if RodSys.canAutoEquip() then
                 task.defer(RodSys.equip)
             end
             Util.updateStatusTag()
@@ -1924,7 +2113,7 @@ function Water.refresh(forceNotify, forceFullScan)
         end
     elseif State.IsFarmPausedNoWater then
         State.IsFarmPausedNoWater = false
-        if State.EnabledAutoEquip then
+        if RodSys.canAutoEquip() then
             task.defer(RodSys.equip)
         end
         Util.updateStatusTag()
@@ -2204,6 +2393,33 @@ function Reel.invokeSellAll(isProactive)
     end)
 end
 
+function Reel.onCleanCatch(now)
+    State.WaitingForBite = false
+    State.BiteActive = false
+    State.BiteHasReeled = true
+    State.CastBusyUntil = 0
+    State.ConsecutiveCatches += 1
+    State.ConsecutiveInvalidFails = 0
+    State.ConsecutiveBusyFails = 0
+
+    local m = State.Monitor
+    if m.LastCatchTime > 0 and (now - m.LastCatchTime) <= 60 then
+        m.CycleTimeSum += (now - m.LastCatchTime)
+        m.CycleTimeCount += 1
+    end
+    m.LastCatchTime = now
+
+    if State.AutoTunePingBuffer and State.ConsecutiveCatches >= 20 and (now - State.LastBufferAdjustAt) >= 35 then
+        local floorTarget = math.max(0.02, State.AutoTuneFloorBuffer)
+        if State.PingBuffer > floorTarget + 0.005 then
+            State.PingBuffer = math.max(floorTarget, math.floor((State.PingBuffer - 0.01) * 100 + 0.5) / 100)
+            State.LastBufferAdjustAt = now
+            State.ConsecutiveCatches = 0
+            Reel.updatePingSlider()
+        end
+    end
+end
+
 function Reel.onServerEvent(eventName, data)
     local now = os.clock()
     State.LastServerActivityAt = now
@@ -2227,23 +2443,14 @@ function Reel.onServerEvent(eventName, data)
         State.SawProgressBelowTarget = false
         State.ConsecutiveBusyFails = 0
         Reel.recalcSafeTime()
+    elseif eventName == "CrystalCaught" then
+        Reel.onCleanCatch(now)
     elseif eventName == "Caught" then
-        State.WaitingForBite = false
-        State.BiteActive = false
-        State.BiteHasReeled = true
-        State.CastBusyUntil = 0
-        State.ConsecutiveCatches += 1
-        State.ConsecutiveInvalidFails = 0
-        State.ConsecutiveBusyFails = 0
+        Reel.onCleanCatch(now)
 
         local m = State.Monitor
         m.TotalCaught += 1
         table.insert(m.RecentCatches, now)
-        if m.LastCatchTime > 0 and (now - m.LastCatchTime) <= 60 then
-            m.CycleTimeSum += (now - m.LastCatchTime)
-            m.CycleTimeCount += 1
-        end
-        m.LastCatchTime = now
 
         local rarity = (type(data) == "table" and data.rarity) or "Common"
         local fishName = (type(data) == "table" and data.name) or "Fish"
@@ -2268,16 +2475,6 @@ function Reel.onServerEvent(eventName, data)
             local bagCnt, bagLim = Monitor.getBagCounts()
             if bagCnt ~= nil and bagLim > 0 and bagCnt >= (bagLim - 2) then
                 Reel.invokeSellAll(true)
-            end
-        end
-
-        if State.AutoTunePingBuffer and State.ConsecutiveCatches >= 20 and (now - State.LastBufferAdjustAt) >= 35 then
-            local floorTarget = math.max(0.02, State.AutoTuneFloorBuffer)
-            if State.PingBuffer > floorTarget + 0.005 then
-                State.PingBuffer = math.max(floorTarget, math.floor((State.PingBuffer - 0.01) * 100 + 0.5) / 100)
-                State.LastBufferAdjustAt = now
-                State.ConsecutiveCatches = 0
-                Reel.updatePingSlider()
             end
         end
     elseif eventName == "Failed" then
@@ -2612,6 +2809,16 @@ function Coffee.getStatusSummary()
     return "None active"
 end
 
+function Coffee.shouldTriggerNow()
+    local mode = State.Coffee.TriggerMode
+    if mode == "Always (24/7)" then
+        return true
+    elseif mode == "Events (Galatama + Primordial)" then
+        return (State.Primordial.CurrentEvent ~= nil) or State.Galatama.InEvent
+    end
+    return State.Primordial.CurrentEvent ~= nil
+end
+
 function Coffee.findHeldOrBackpackTool(targetId)
     local cc = Cfg.syncCoffeeCache()
     local info = (targetId and cc and cc.ById) and cc.ById[targetId] or nil
@@ -2757,7 +2964,7 @@ function Coffee.pullAndDrink(cid)
 
     State.Coffee.IsDrinking = false
     Coffee.syncHeldFlag()
-    if State.EnabledAutoEquip and not (State.EnabledPauseNoWater and State.IsFarmPausedNoWater) then
+    if RodSys.canAutoEquip() then
         task.delay(0.2, RodSys.equip)
     end
     return okRun and drank == true
@@ -2869,10 +3076,7 @@ function Coffee.brewBatchAndDrink(tasksToTry, syncBeforeReturn)
             if not fCF then
                 State.Coffee.NoFelliciaUntil = os.clock() + 120
             elseif char and hrp and hum and hum.Health > 0 then
-                local savedCF = hrp.CFrame
-                if State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent] then
-                    savedCF = CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
-                end
+                local savedCF = Coordinator.getResumeCFrame(hrp.CFrame)
 
                 if Util.stealthTeleport(fCF * CFrame.new(0, 0, -4), fCF.Position, 0) then
                     local qStep = tonumber(LocalPlayer:GetAttribute("CoffeeQuestStep")) or 0
@@ -2947,7 +3151,7 @@ function Coffee.brewBatchAndDrink(tasksToTry, syncBeforeReturn)
     end
     if brewedId then
         return Coffee.pullAndDrink(brewedId)
-    elseif State.EnabledAutoEquip and not (State.EnabledPauseNoWater and State.IsFarmPausedNoWater) then
+    elseif RodSys.canAutoEquip() then
         task.delay(0.2, RodSys.equip)
     end
     return false
@@ -2991,7 +3195,7 @@ end
 
 function Coffee.evaluate()
     local c = State.Coffee
-    if not c.Enabled or c.IsDrinking or State.Primordial.IsTeleporting or State.Maze.IsRunning or State.InAfkServer then
+    if not c.Enabled or c.IsDrinking or State.Coordinator.IsTeleporting or State.Maze.IsRunning or State.InAfkServer then
         return
     end
     local now = os.clock()
@@ -2999,7 +3203,7 @@ function Coffee.evaluate()
         return
     end
 
-    if c.TriggerMode == "Primordial Events Only" and not State.Primordial.CurrentEvent then
+    if not Coffee.shouldTriggerNow() then
         return
     end
 
@@ -3528,9 +3732,9 @@ function Maze.solve(mode, isManual)
                 return false
             end
             Maze.cacheHoneymoon()
-            if not mz.HoneymoonCFrame and State.Primordial.HomeCFrame then
+            if not mz.HoneymoonCFrame and State.Coordinator.HomeCFrame then
                 pcall(function()
-                    LocalPlayer:RequestStreamAroundAsync(State.Primordial.HomeCFrame.Position)
+                    LocalPlayer:RequestStreamAroundAsync(State.Coordinator.HomeCFrame.Position)
                 end)
                 task.wait(0.35)
                 Maze.cacheHoneymoon()
@@ -3545,9 +3749,7 @@ function Maze.solve(mode, isManual)
                 return false
             end
 
-            savedCF = (State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent])
-                and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
-                or hrp.CFrame
+            savedCF = Coordinator.getResumeCFrame(hrp.CFrame)
 
             if Util.stealthTeleport(hCF * CFrame.new(0, 0, -4), hCF.Position, 0) then
                 hopped = true
@@ -3681,13 +3883,13 @@ function Maze.solve(mode, isManual)
         mz.LastStatus = "Error"
     end
     Water.refresh(false, true)
-    if State.EnabledAutoEquip and not (State.EnabledPauseNoWater and State.IsFarmPausedNoWater) then
+    if RodSys.canAutoEquip() then
         task.delay(0.2, RodSys.equip)
     end
     return okRun
 end
 
--- ==================== PRIMORDIAL EVENT TELEPORT MODULE ====================
+-- ==================== PRIMORDIAL EVENT HELPERS ====================
 function Primordial.isSpotActive(spot)
     local nowEp = Util.serverNow()
     local active = false
@@ -3741,6 +3943,10 @@ function Primordial.isRodValidForSpot(rodName, cfg, spot)
             return cfg.rodAllowed(rodName)
         end)
         if okR and not allowed then
+            return false
+        end
+    elseif rInfo then
+        if rInfo.MaxRarity ~= "Supremacy" or (tonumber(rInfo.Luck) or 0) < 8 then
             return false
         end
     end
@@ -3852,179 +4058,6 @@ function Primordial.pickBestEvent()
     return candidates[1]
 end
 
-function Primordial.teleportTo(targetCF, spot)
-    local p = State.Primordial
-    if p.IsTeleporting or not targetCF then
-        return
-    end
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then
-        return
-    end
-
-    p.IsTeleporting = true
-    p.TeleportStartedAt = os.clock()
-    p.LastTeleportAt = os.clock()
-
-    task.spawn(function()
-        pcall(function()
-            local waitStart = os.clock()
-            while (State.BiteActive or State.WaitingForBite) and (os.clock() - waitStart) < 12 do
-                task.wait(0.1)
-            end
-
-            if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
-                pcall(function()
-                    Remotes.Cancel:FireServer()
-                end)
-                task.wait(0.15)
-            end
-
-            State.WaitingForBite = false
-            State.BiteActive = false
-            State.BiteHasReeled = false
-            State.ConsecutiveBusyFails = 0
-
-            char = LocalPlayer.Character
-            hrp = char and char:FindFirstChild("HumanoidRootPart")
-            hum = char and char:FindFirstChildOfClass("Humanoid")
-
-            if char and char.Parent and hrp and hrp.Parent and hum and hum.Health > 0 then
-                if not p.HomeCFrame and spot then
-                    p.HomeCFrame = hrp.CFrame
-                end
-
-                if spot and not p.CurrentEvent and State.Coffee.Enabled then
-                    Coffee.prepareBeforeEvent()
-                    char = LocalPlayer.Character
-                    hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    hum = char and char:FindFirstChildOfClass("Humanoid")
-                    if not (char and char.Parent and hrp and hrp.Parent and hum and hum.Health > 0) then
-                        return
-                    end
-                end
-
-                if not Util.stealthTeleport(targetCF, nil, 0.4) then
-                    return
-                end
-
-                State.WaitingForBite = false
-                State.LastWaterScanPos = nil
-                State.LastWaterHitPos = nil
-                State.LastCastSentAt = 0
-
-                if spot then
-                    p.CurrentEvent = spot.Key
-                    State.IsNearWater = true
-                    State.IsFarmPausedNoWater = false
-                    Util.updateStatusTag()
-
-                    Water.refresh(false, true)
-
-                    if p.SwapEventRod then
-                        RodSys.recheckBestRod()
-                    elseif State.EnabledAutoEquip then
-                        RodSys.equip()
-                    end
-                    if State.Coffee.Enabled then
-                        task.delay(0.8, Coffee.evaluate)
-                    end
-
-                    local cfg = Cfg.get(spot.CfgName)
-                    local leftSec = (cfg and type(cfg.secondsLeft) == "function") and cfg.secondsLeft(Util.serverNow()) or 0
-                    local gear = Monitor.getGearSummary(true)
-                    local chStr = "--"
-                    if cfg and type(cfg.chance) == "function" then
-                        local okC, bProb = pcall(function()
-                            return cfg.chance(gear.TotalLuck)
-                        end)
-                        if okC and type(bProb) == "number" and bProb > 0 then
-                            local rb = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[spot.Name]) or 0
-                            chStr = Util.formatOneIn(bProb * (1 + rb) * (gear.PrimordialMult or 1))
-                        end
-                    end
-
-                    if UI.Window then
-                        UI.Window:Notify({ title = "Primordial Event!", content = string.format("Teleported to %s (%s left)", spot.Name, Util.formatDur(leftSec)), duration = 4 })
-                    end
-                    Webhook.primordial(
-                        "Primordial Event Joined: " .. spot.Name,
-                        string.format("Teleported to **%s** (%s remaining)\nRod: %s • Luck: %.1fx (%s)\nCoffee: %s", spot.Name, Util.formatDur(leftSec), gear.RodName, gear.TotalLuck, chStr, Coffee.getStatusSummary()),
-                        CONST.RARITY_COLORS.Primordial
-                    )
-
-                    task.delay(1.8, function()
-                        if hrp and hrp.Parent and p.CurrentEvent == spot.Key then
-                            local dist = (hrp.Position - targetCF.Position).Magnitude
-                            if dist > 60 then
-                                p.BlockedUntil[spot.Key] = os.clock() + 120
-                                p.CurrentEvent = nil
-                                Util.updateStatusTag()
-                                Webhook.alert("Primordial Snapback", string.format("Server moved player away from %s. Skipping for 2m.", spot.Name), CONST.RARITY_COLORS.Alert)
-                            end
-                        end
-                    end)
-                else
-                    p.CurrentEvent = nil
-                    p.HomeCFrame = nil
-                    State.IsNearWater = true
-                    State.IsFarmPausedNoWater = false
-                    Util.updateStatusTag()
-                    Water.refresh(false, true)
-                    if p.SwapEventRod then
-                        RodSys.recheckBestRod()
-                    elseif State.EnabledAutoEquip then
-                        RodSys.equip()
-                    end
-                    if UI.Window then
-                        UI.Window:Notify({ title = "Primordial Ended", content = "Returned to your normal fishing spot", duration = 3 })
-                    end
-                    Webhook.primordial("Primordial Window Ended", "Returned safely to normal fishing spot.", CONST.RARITY_COLORS.Report)
-                end
-            end
-        end)
-
-        p.IsTeleporting = false
-    end)
-end
-
-function Primordial.evaluate()
-    local p = State.Primordial
-    if not p.Enabled or p.IsTeleporting or State.Coffee.IsDrinking or State.Maze.IsRunning or State.InAfkServer then
-        return
-    end
-    if (os.clock() - p.LastTeleportAt) < 3 then
-        return
-    end
-
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        return
-    end
-
-    local bestSpot = Primordial.pickBestEvent()
-    if bestSpot then
-        if p.CurrentEvent ~= bestSpot.Key then
-            Primordial.teleportTo(bestSpot.CFrame, bestSpot)
-        elseif (hrp.Position - bestSpot.CFrame.Position).Magnitude > 60 then
-            Primordial.teleportTo(bestSpot.CFrame, bestSpot)
-        end
-    elseif p.CurrentEvent ~= nil then
-        if p.ReturnHome and p.HomeCFrame then
-            Primordial.teleportTo(p.HomeCFrame, nil)
-        else
-            p.CurrentEvent = nil
-            Util.updateStatusTag()
-            if p.SwapEventRod then
-                RodSys.recheckBestRod()
-            end
-        end
-    end
-end
-
 function Primordial.bindNotifUI(gui)
     local matchedKey = nil
     for _, key in ipairs(CONST.PRIMORDIAL_ORDER) do
@@ -4042,7 +4075,7 @@ function Primordial.bindNotifUI(gui)
             State.Primordial.NotifUntil[matchedKey] = os.clock() + 60
             State.Primordial.ActivatedAt[matchedKey] = State.Primordial.ActivatedAt[matchedKey] or os.clock()
             if State.Primordial.Enabled then
-                task.defer(Primordial.evaluate)
+                task.defer(Coordinator.evaluate)
             end
         end
     end
@@ -4050,6 +4083,1001 @@ function Primordial.bindNotifUI(gui)
     table.insert(Conns.PrimNotif, gui:GetPropertyChangedSignal("Enabled"):Connect(onEnabled))
     if gui.Enabled then
         onEnabled()
+    end
+end
+
+-- ==================== GALATAMA TOURNAMENT MODULE ====================
+function Galatama.getLiveInfo()
+    local gState = tostring(Svc.ReplicatedStorage:GetAttribute("GalaState") or "Idle")
+    local gArea = tostring(Svc.ReplicatedStorage:GetAttribute("GalaArea") or "")
+    local gMode = tostring(Svc.ReplicatedStorage:GetAttribute("GalaMode") or "")
+    local gStartsAt = tonumber(Svc.ReplicatedStorage:GetAttribute("GalaStartsAt")) or 0
+    local gEndsAt = tonumber(Svc.ReplicatedStorage:GetAttribute("GalaEndsAt")) or 0
+    local gScale = tonumber(Svc.ReplicatedStorage:GetAttribute("GalaPrizeScale")) or 1
+    local nowEp = Util.serverNow()
+    local isLive = (gState == "Live" and gArea ~= "" and (gEndsAt <= 0 or nowEp < gEndsAt))
+    return {
+        State = gState,
+        Area = gArea,
+        Mode = gMode,
+        StartsAt = gStartsAt,
+        EndsAt = gEndsAt,
+        LeftSec = math.max(0, gEndsAt - nowEp),
+        PrizeScale = gScale,
+        IsLive = isLive,
+    }
+end
+
+function Galatama.isEligible()
+    if os.clock() < State.Galatama.BlockedUntil then
+        return false
+    end
+    local cfg = Cfg.get("GalatamaConfig")
+    local minLvl = (cfg and tonumber(cfg.MinLevel)) or 50
+    local curLvl = Monitor.readLevelXp() or tonumber(LocalPlayer:GetAttribute("Level")) or 0
+    return curLvl >= minLvl
+end
+
+function Galatama.getBox(areaName)
+    if type(areaName) ~= "string" or areaName == "" then
+        return nil
+    end
+    local locCfg = Cfg.get("LocationConfig")
+    if locCfg and type(locCfg.box) == "function" then
+        local okB, box = pcall(function()
+            return locCfg.box(areaName)
+        end)
+        if okB and typeof(box) == "Instance" and box:IsA("BasePart") then
+            return box
+        end
+    end
+    local repAreas = Svc.ReplicatedStorage:FindFirstChild("LocationAreas")
+    local repBox = repAreas and repAreas:FindFirstChild(areaName)
+    if repBox and repBox:IsA("BasePart") then
+        return repBox
+    end
+    local locFolder = workspace:FindFirstChild("Location")
+    local wsBox = (locFolder and locFolder:FindFirstChild(areaName)) or workspace:FindFirstChild(areaName, true)
+    if wsBox and wsBox:IsA("BasePart") then
+        return wsBox
+    end
+    return nil
+end
+
+function Galatama.isInsideBox(box, pos)
+    if not box or not pos then
+        return false
+    end
+    local locCfg = Cfg.get("LocationConfig")
+    if locCfg and type(locCfg.inside) == "function" then
+        local okI, res = pcall(function()
+            return locCfg.inside(box, pos)
+        end)
+        if okI then
+            return res == true
+        end
+    end
+    local rel = box.CFrame:PointToObjectSpace(pos)
+    local half = box.Size / 2
+    local marginY = (locCfg and tonumber(locCfg.MarginY)) or 30
+    return math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and math.abs(rel.Y) <= (half.Y + marginY)
+end
+
+function Galatama.findSafeFishingSpot(areaName, box)
+    if not box then
+        return nil
+    end
+    local guideCF = box.CFrame * CFrame.new(0, -box.Size.Y * 0.3, 0)
+    pcall(function()
+        LocalPlayer:RequestStreamAroundAsync(guideCF.Position)
+    end)
+    task.wait(0.25)
+
+    local exclude = {}
+    for _, plr in ipairs(Svc.Players:GetPlayers()) do
+        if plr.Character then
+            table.insert(exclude, plr.Character)
+        end
+    end
+
+    local topY = box.Position.Y + (box.Size.Y * 0.5) + 18
+    local rayLen = box.Size.Y + 55
+    local maxX = math.min(box.Size.X * 0.42, 90)
+    local maxZ = math.min(box.Size.Z * 0.42, 90)
+
+    local function probeGroundAndWater(worldXZ)
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = exclude
+        params.IgnoreWater = false
+
+        local origin = Vector3.new(worldXZ.X, topY, worldXZ.Z)
+        local hit = workspace:Raycast(origin, Vector3.new(0, -rayLen, 0), params)
+        if not hit then
+            return nil, nil
+        end
+        if hit.Instance and hit.Instance.CanCollide and not Water.isHit(hit) then
+            local standPos = hit.Position + Vector3.new(0, 3, 0)
+            if Galatama.isInsideBox(box, standPos) then
+                local wHit = Water.findNearestHit(standPos, 30)
+                if wHit then
+                    local lookFlat = Vector3.new(wHit.Position.X, standPos.Y, wHit.Position.Z)
+                    if (lookFlat - standPos).Magnitude > 0.2 then
+                        return CFrame.lookAt(standPos, lookFlat), nil
+                    end
+                    return CFrame.new(standPos), nil
+                end
+                return nil, CFrame.new(standPos)
+            end
+        elseif Water.isHit(hit) then
+            local waterStand = hit.Position + Vector3.new(0, 3, 0)
+            if Galatama.isInsideBox(box, waterStand) then
+                return nil, CFrame.new(waterStand)
+            end
+        end
+        return nil, nil
+    end
+
+    local bestWaterCF, bestFallbackCF = probeGroundAndWater(guideCF.Position)
+    if bestWaterCF then
+        return bestWaterCF
+    end
+
+    local step = 18
+    for r = step, math.max(maxX, maxZ), step do
+        for angIdx = 0, 11 do
+            local ang = (angIdx / 12) * math.pi * 2
+            local lx = math.clamp(math.cos(ang) * r, -maxX, maxX)
+            local lz = math.clamp(math.sin(ang) * r, -maxZ, maxZ)
+            local worldPt = (box.CFrame * CFrame.new(lx, 0, lz)).Position
+            local wCF, fCF = probeGroundAndWater(worldPt)
+            if wCF then
+                return wCF
+            end
+            if not bestFallbackCF and fCF then
+                bestFallbackCF = fCF
+            end
+        end
+    end
+
+    if bestFallbackCF then
+        return bestFallbackCF
+    end
+    return guideCF
+end
+
+function Galatama.needsTeleport(areaName, hrp)
+    local box = Galatama.getBox(areaName)
+    if not box or not hrp then
+        return false, box
+    end
+    if not Galatama.isInsideBox(box, hrp.Position) then
+        return true, box
+    end
+    if not State.IsNearWater and (os.clock() - State.Galatama.LastAreaAdjustAt) >= 10 then
+        return true, box
+    end
+    return false, box
+end
+
+function Galatama.getReportLine()
+    local info = Galatama.getLiveInfo()
+    local g = State.Galatama
+    local rankStr = g.MyRank and string.format("#%d/%d", g.MyRank, g.Players) or string.format("Unranked (%d plr)", g.Players)
+    local areaStr = g.JoinedArea or (info.Area ~= "" and info.Area or "Galatama")
+    return string.format("Galatama: %s (%s)\n%s • %d caught (%s left)", areaStr, info.Mode ~= "" and info.Mode or "Live", rankStr, g.MyCatches or 0, Util.formatDur(info.LeftSec))
+end
+
+function Galatama.onBoard(payload)
+    if type(payload) ~= "table" then
+        return
+    end
+    local g = State.Galatama
+    local prevRank = g.MyRank
+    g.BoardMode = payload.mode
+    g.Players = tonumber(payload.n) or 0
+    g.LastBoardAt = os.clock()
+    if type(payload.me) == "table" then
+        g.MyRank = tonumber(payload.me.r)
+        g.MyScore = payload.me.s
+        g.MyCatches = tonumber(payload.me.c) or 0
+    else
+        g.MyRank = nil
+        g.MyScore = nil
+        g.MyCatches = 0
+    end
+    if prevRank == nil and g.MyRank ~= nil and g.InEvent then
+        if UI.Window then
+            UI.Window:Notify({
+                title = "Galatama Qualified!",
+                content = string.format("Rank #%d / %d (%s)", g.MyRank, g.Players, tostring(g.BoardMode or "Live")),
+                duration = 3,
+            })
+        end
+    end
+end
+
+function Galatama.onNotify(payload)
+    if type(payload) ~= "table" then
+        return
+    end
+    if payload.kind == "start" then
+        if State.Galatama.Enabled then
+            task.defer(Coordinator.evaluate)
+        end
+    elseif payload.kind == "fail" or payload.kind == "cancel" then
+        if State.Galatama.InEvent then
+            State.Galatama.InEvent = false
+            Util.updateStatusTag()
+            task.defer(Coordinator.evaluate)
+        end
+    end
+end
+
+function Galatama.onResult(payload)
+    if type(payload) ~= "table" then
+        return
+    end
+    local g = State.Galatama
+    local participated = (type(payload.me) == "table" and payload.me.r ~= nil) or g.InEvent or g.JoinedArea ~= nil
+    if participated then
+        local total = tonumber(payload.total) or 0
+        local minPlr = tonumber(payload.minPlayers) or 10
+        local myRank = (type(payload.me) == "table" and tonumber(payload.me.r)) or nil
+        local myPrize = tonumber(payload.myPrize) or 0
+        local areaStr = tostring(payload.area or g.JoinedArea or "Galatama")
+        local modeStr = tostring(payload.mode or g.BoardMode or "")
+
+        local summary
+        if total < minPlr then
+            summary = string.format("Cancelled (%d/%d players)", total, minPlr)
+        elseif myRank then
+            local prizeText = myPrize > 0 and ("+" .. Util.formatShort(myPrize) .. " coins") or "No prize"
+            summary = string.format("Rank **#%d / %d** • %s", myRank, total, prizeText)
+        else
+            summary = string.format("Unplaced (%d participants)", total)
+        end
+
+        if UI.Window then
+            UI.Window:Notify({
+                title = "Galatama Finished (" .. areaStr .. ")",
+                content = summary:gsub("%*%*", ""),
+                duration = 5,
+            })
+        end
+        Webhook.galatamaMagnet(
+            string.format("Galatama Result: %s (%s)", areaStr, modeStr),
+            summary,
+            CONST.RARITY_COLORS.Galatama
+        )
+    end
+
+    g.InEvent = false
+    g.JoinedArea = nil
+    g.JoinedAt = 0
+    g.MyRank = nil
+    g.MyScore = nil
+    g.MyCatches = 0
+    g.Players = 0
+    Util.updateStatusTag()
+    task.delay(0.5, Coordinator.evaluate)
+end
+
+-- ==================== MAGNET & CRYSTAL HOLLOW MODULE ====================
+function Magnet.getConfig()
+    return Cfg.get("CrystalConfig")
+end
+
+function Magnet.getStatusSummary()
+    local cfg = Magnet.getConfig()
+    local lv = math.floor(tonumber(LocalPlayer:GetAttribute("MagnetLevel")) or 0)
+    local maxLv = (cfg and tonumber(cfg.MagnetMax)) or 50
+    local vCnt = math.floor(tonumber(LocalPlayer:GetAttribute("VerdantCrystals")) or 0)
+    local aCnt = math.floor(tonumber(LocalPlayer:GetAttribute("AzureCrystals")) or 0)
+    local amCnt = math.floor(tonumber(LocalPlayer:GetAttribute("AmethystCrystals")) or 0)
+
+    if lv <= 0 then
+        return string.format("Locked (Tono Lv.90) • Crystals V:%d A:%d Am:%d", vCnt, aCnt, amCnt)
+    end
+    local mult = 1
+    if cfg and type(cfg.magnetMult) == "function" then
+        local okM, mVal = pcall(function()
+            return cfg.magnetMult(lv)
+        end)
+        if okM and tonumber(mVal) then
+            mult = tonumber(mVal)
+        end
+    end
+    return string.format("Lv.%d/%d (%.2fx) • Crystals V:%d A:%d Am:%d", lv, maxLv, mult, vCnt, aCnt, amCnt)
+end
+
+function Magnet.isRodValidForCrystal(rodName)
+    local rc = Cfg.get("RodConfig")
+    local rInfo = rc and type(rc.get) == "function" and rc.get(rodName) or nil
+    if rInfo and rInfo.Access == "Staff" then
+        return true
+    end
+    local celCfg = Cfg.get("CelestraConfig")
+    if celCfg and type(celCfg.rodAllowed) == "function" then
+        local okR, allowed = pcall(function()
+            return celCfg.rodAllowed(rodName)
+        end)
+        if okR then
+            return allowed == true
+        end
+    end
+    if rInfo then
+        return rInfo.MaxRarity == "Supremacy" and (tonumber(rInfo.Luck) or 0) >= 8
+    end
+    return rodName == "Wings Everlove"
+end
+
+function Magnet.hasCrystalRod()
+    local gear = Monitor.getGearSummary()
+    if Magnet.isRodValidForCrystal(gear.RodName) then
+        return true
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, item in ipairs(bp:GetChildren()) do
+            if RodSys.isRod(item) then
+                local rn = item:GetAttribute("RodName") or item.Name
+                if Magnet.isRodValidForCrystal(rn) then
+                    return true
+                end
+            end
+        end
+    end
+    local rcCont = RodSys.getContentContainer()
+    if rcCont then
+        for _, entry in ipairs(rcCont:GetChildren()) do
+            if entry:IsA("GuiObject") and entry.Visible then
+                local lower = string.lower(entry.Name)
+                if lower ~= "template" and lower ~= "example" and lower ~= "placeholder" then
+                    local rName = entry:GetAttribute("RodName") or entry.Name
+                    if Magnet.isRodValidForCrystal(rName) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+function Magnet.isStandbyEligible()
+    local m = State.Magnet
+    if not m.CrystalHollowStandby or State.InAfkServer then
+        return false
+    end
+    if os.clock() < m.StandbyBlockedUntil then
+        return false
+    end
+    local cfg = Magnet.getConfig()
+    local reqLvl = (cfg and tonumber(cfg.UnlockLevel)) or 90
+    local talkAttr = (cfg and cfg.TalkAttr) or "NpcTalkedTono"
+    local curLvl = Monitor.readLevelXp() or tonumber(LocalPlayer:GetAttribute("Level")) or 0
+    local magLv = math.floor(tonumber(LocalPlayer:GetAttribute("MagnetLevel")) or 0)
+    local talkedTono = (LocalPlayer:GetAttribute(talkAttr) == true)
+
+    if curLvl < reqLvl then
+        return false
+    end
+    if not talkedTono or magLv < 1 then
+        if not m.WarnedTono and UI.Window then
+            m.WarnedTono = true
+            UI.Window:Notify({ title = "Crystal Hollow Locked", content = "Talk to Tono first (Lv.90 + Wings Everlove) to unlock Magnet!", duration = 4 })
+        end
+        return false
+    end
+    if not Magnet.hasCrystalRod() then
+        return false
+    end
+    return true
+end
+
+function Magnet.canAffordUpgrade(curLv)
+    local cfg = Magnet.getConfig()
+    local maxLv = (cfg and tonumber(cfg.MagnetMax)) or 50
+    if curLv < 1 or curLv >= maxLv then
+        return false, "MaxOrLocked", nil
+    end
+    if not cfg or type(cfg.magnetCost) ~= "function" then
+        return false, "NoConfig", nil
+    end
+    local cost = cfg.magnetCost(curLv + 1)
+    if type(cost) ~= "table" then
+        return false, "NoCost", nil
+    end
+    local coins = tonumber(LocalPlayer:GetAttribute("Coins")) or 0
+    local needCoins = tonumber(cost.coin) or 0
+    if coins < needCoins then
+        return false, "Need " .. Util.formatShort(needCoins) .. " coins", cost
+    end
+    if type(cost.crystals) == "table" then
+        for cid, needAmt in pairs(cost.crystals) do
+            local nAmt = tonumber(needAmt) or 0
+            local cInfo = cfg.Crystals and cfg.Crystals[cid]
+            local attrName = (cInfo and cInfo.Attr) or (cid .. "Crystals")
+            local haveAmt = tonumber(LocalPlayer:GetAttribute(attrName)) or 0
+            if haveAmt < nAmt then
+                return false, string.format("Need %d/%d %s", haveAmt, nAmt, cid), cost
+            end
+        end
+    end
+    return true, "Ready", cost
+end
+
+function Magnet.tryUpgrade(isManual)
+    local m = State.Magnet
+    if m.IsUpgrading then
+        return false
+    end
+    local upgRem = Remotes.MagnetUpgrade
+    if not upgRem or not upgRem.Parent then
+        if isManual and UI.Window then
+            UI.Window:Notify({ title = "Magnet Upgrade", content = "MagnetUpgrade remote not resolved yet.", duration = 3 })
+        end
+        return false
+    end
+
+    local curLv = math.floor(tonumber(LocalPlayer:GetAttribute("MagnetLevel")) or 0)
+    if curLv < 1 then
+        if isManual and UI.Window then
+            UI.Window:Notify({ title = "Magnet Locked", content = "Talk to Tono (Lv.90 + Wings Everlove) to unlock Magnet.", duration = 3 })
+        end
+        return false
+    end
+
+    local okAfford, reasonMsg, cost = Magnet.canAffordUpgrade(curLv)
+    if not okAfford then
+        m.UpgradeCooldownUntil = os.clock() + 10
+        if isManual and UI.Window then
+            UI.Window:Notify({ title = "Magnet Lv." .. tostring(curLv), content = tostring(reasonMsg), duration = 3 })
+        end
+        return false
+    end
+
+    m.IsUpgrading = true
+    local upgraded = false
+    task.spawn(function()
+        local okCall, okRes, resOrReason, missingCrystal = pcall(function()
+            return upgRem:InvokeServer(curLv)
+        end)
+        m.IsUpgrading = false
+        if okCall and okRes then
+            upgraded = true
+            local newLv = (type(resOrReason) == "table" and tonumber(resOrReason.level)) or (curLv + 1)
+            local cfg = Magnet.getConfig()
+            local mult = (cfg and type(cfg.magnetMult) == "function" and tonumber(cfg.magnetMult(newLv))) or 1
+            m.UpgradeCooldownUntil = os.clock() + 0.8
+            if UI.Window then
+                UI.Window:Notify({
+                    title = "Magnet Upgraded!",
+                    content = string.format("Lv.%d -> Lv.%d (%.3fx luck/speed)", curLv, newLv, mult),
+                    duration = 4,
+                })
+            end
+            local coinStr = cost and Util.formatShort(cost.coin or 0) or "--"
+            Webhook.galatamaMagnet(
+                string.format("Magnet Upgraded: Lv.%d -> Lv.%d", curLv, newLv),
+                string.format("Multiplier: **%.3fx** • Cost: %s coins\n%s", mult, coinStr, Magnet.getStatusSummary()),
+                CONST.RARITY_COLORS.Magnet
+            )
+            task.delay(0.9, function()
+                if State.Magnet.AutoUpgrade then
+                    Magnet.evaluateUpgrade()
+                end
+            end)
+        else
+            local failReason = okCall and tostring(resOrReason or "Failed") or "InvokeError"
+            if failReason == "Busy" then
+                m.UpgradeCooldownUntil = os.clock() + 2
+            elseif failReason == "LevelChanged" then
+                m.UpgradeCooldownUntil = os.clock() + 1
+            else
+                m.UpgradeCooldownUntil = os.clock() + 20
+            end
+            if isManual and UI.Window then
+                local extra = missingCrystal and (" (" .. tostring(missingCrystal) .. ")") or ""
+                UI.Window:Notify({ title = "Magnet Upgrade Failed", content = failReason .. extra, duration = 3 })
+            end
+        end
+    end)
+    return upgraded
+end
+
+function Magnet.evaluateUpgrade()
+    local m = State.Magnet
+    if not m.AutoUpgrade or m.IsUpgrading then
+        return
+    end
+    local now = os.clock()
+    if now < m.UpgradeCooldownUntil then
+        return
+    end
+    if not Remotes.MagnetUpgrade or not Remotes.MagnetUpgrade.Parent then
+        return
+    end
+    local curLv = math.floor(tonumber(LocalPlayer:GetAttribute("MagnetLevel")) or 0)
+    if curLv < 1 then
+        return
+    end
+    local canAfford = Magnet.canAffordUpgrade(curLv)
+    if canAfford then
+        Magnet.tryUpgrade(false)
+    else
+        m.UpgradeCooldownUntil = now + 8
+    end
+end
+
+function Magnet.onCrystalFx(payload)
+    if type(payload) ~= "table" or payload.u ~= LocalPlayer.UserId then
+        return
+    end
+    local cid = tostring(payload.c or "Crystal")
+    local sc = State.Magnet.SessionCrystals
+    if sc[cid] ~= nil then
+        sc[cid] += 1
+    end
+    local cfg = Magnet.getConfig()
+    local cInfo = cfg and cfg.Crystals and cfg.Crystals[cid]
+    local display = (cInfo and cInfo.Name) or (cid .. " Crystal")
+    local attrName = (cInfo and cInfo.Attr) or (cid .. "Crystals")
+    local totalOwned = math.floor(tonumber(LocalPlayer:GetAttribute(attrName)) or 0)
+
+    Webhook.galatamaMagnet(
+        string.format("[Crystal] %s Obtained!", display),
+        string.format("Owned: **%d** • %s", totalOwned, Magnet.getStatusSummary()),
+        CONST.RARITY_COLORS.Crystal
+    )
+    if State.Magnet.AutoUpgrade then
+        State.Magnet.UpgradeCooldownUntil = 0
+        task.delay(0.4, Magnet.evaluateUpgrade)
+    end
+end
+
+-- ==================== UNIFIED ACTIVITY COORDINATOR ====================
+function Coordinator.getResumeCFrame(fallbackCF)
+    if State.Galatama.InEvent then
+        local info = Galatama.getLiveInfo()
+        if info.IsLive then
+            local box = Galatama.getBox(info.Area)
+            if box then
+                local spotCF = Galatama.findSafeFishingSpot(info.Area, box)
+                if spotCF then
+                    return spotCF
+                end
+            end
+        end
+    end
+    if State.Primordial.CurrentEvent and CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent] then
+        return CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
+    end
+    if State.Magnet.InCrystalHollow then
+        return CFrame.new(CONST.CRYSTAL_HOLLOW_POS)
+    end
+    return fallbackCF
+end
+
+function Coordinator.resolveDesired()
+    local galaInfo = Galatama.getLiveInfo()
+    local galaReady = State.Galatama.Enabled and galaInfo.IsLive and Galatama.isEligible()
+
+    local bestPrim = nil
+    if State.Primordial.Enabled and State.Galatama.Priority ~= "Galatama Only" then
+        bestPrim = Primordial.pickBestEvent()
+    end
+    local primReady = (bestPrim ~= nil)
+
+    if State.Galatama.Priority == "Primordial First" then
+        if primReady then
+            return "Primordial", bestPrim
+        elseif galaReady then
+            return "Galatama", galaInfo
+        end
+    else
+        if galaReady then
+            return "Galatama", galaInfo
+        elseif primReady then
+            return "Primordial", bestPrim
+        end
+    end
+
+    if Magnet.isStandbyEligible() then
+        return "CrystalHollow", nil
+    end
+
+    if (State.Galatama.InEvent or State.Primordial.CurrentEvent ~= nil or State.Magnet.InCrystalHollow)
+        and State.Primordial.ReturnHome
+        and State.Coordinator.HomeCFrame then
+        return "ReturnHome", State.Coordinator.HomeCFrame
+    end
+
+    return "None", nil
+end
+
+function Coordinator.waitIdleAndSaveHome(hrp, leavingNormalSpot)
+    local waitStart = os.clock()
+    while (State.BiteActive or State.WaitingForBite) and (os.clock() - waitStart) < 12 do
+        task.wait(0.1)
+    end
+    if (State.BiteActive or State.WaitingForBite) and Remotes.Cancel and Remotes.Cancel.Parent then
+        pcall(function()
+            Remotes.Cancel:FireServer()
+        end)
+        task.wait(0.15)
+    end
+
+    State.WaitingForBite = false
+    State.BiteActive = false
+    State.BiteHasReeled = false
+    State.ConsecutiveBusyFails = 0
+
+    local char = LocalPlayer.Character
+    local curHrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not char or not char.Parent or not curHrp or not curHrp.Parent or not hum or hum.Health <= 0 then
+        return nil, nil, nil
+    end
+
+    if leavingNormalSpot and not State.Coordinator.HomeCFrame then
+        State.Coordinator.HomeCFrame = curHrp.CFrame
+    end
+
+    return char, curHrp, hum
+end
+
+function Coordinator.transition(kind, data)
+    local co = State.Coordinator
+    if co.IsTeleporting then
+        return
+    end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then
+        return
+    end
+
+    co.IsTeleporting = true
+    co.TeleportStartedAt = os.clock()
+    co.LastTeleportAt = os.clock()
+
+    task.spawn(function()
+        pcall(function()
+            local leavingNormal = (not State.Galatama.InEvent and not State.Primordial.CurrentEvent and not State.Magnet.InCrystalHollow)
+                and (kind == "Galatama" or kind == "Primordial" or kind == "CrystalHollow")
+
+            local curChar, curHrp, curHum = Coordinator.waitIdleAndSaveHome(hrp, leavingNormal)
+            if not curChar or not curHrp or not curHum then
+                return
+            end
+
+            if kind == "Primordial" and data then
+                if State.Primordial.CurrentEvent ~= data.Key and State.Coffee.Enabled and Coffee.shouldTriggerNow() then
+                    -- Coffee pre-brew if needed once CurrentEvent logic runs or if already active
+                    Coffee.prepareBeforeEvent()
+                    curChar = LocalPlayer.Character
+                    curHrp = curChar and curChar:FindFirstChild("HumanoidRootPart")
+                    curHum = curChar and curChar:FindFirstChildOfClass("Humanoid")
+                    if not (curChar and curChar.Parent and curHrp and curHrp.Parent and curHum and curHum.Health > 0) then
+                        return
+                    end
+                end
+
+                if not Util.stealthTeleport(data.CFrame, nil, 0.4) then
+                    return
+                end
+
+                State.Galatama.InEvent = false
+                State.Magnet.InCrystalHollow = false
+                State.Primordial.CurrentEvent = data.Key
+                co.ActiveMode = "Primordial"
+                co.JustTeleportedUntil = os.clock() + 3
+                State.IsNearWater = true
+                State.IsFarmPausedNoWater = false
+                State.LastWaterScanPos = nil
+                State.LastWaterHitPos = nil
+                State.LastCastSentAt = 0
+                Util.updateStatusTag()
+
+                Water.refresh(false, true)
+                if State.Primordial.SwapEventRod then
+                    RodSys.recheckBestRod()
+                elseif RodSys.canAutoEquip() then
+                    RodSys.equip()
+                end
+                if State.Coffee.Enabled then
+                    task.delay(0.8, Coffee.evaluate)
+                end
+
+                local cfg = Cfg.get(data.CfgName)
+                local leftSec = (cfg and type(cfg.secondsLeft) == "function") and cfg.secondsLeft(Util.serverNow()) or 0
+                local gear = Monitor.getGearSummary(true)
+                local chStr = "--"
+                if cfg and type(cfg.chance) == "function" then
+                    local okC, bProb = pcall(function()
+                        return cfg.chance(gear.TotalLuck)
+                    end)
+                    if okC and type(bProb) == "number" and bProb > 0 then
+                        local rb = (gear.RodInfo and gear.RodInfo.PrimordialBonus and gear.RodInfo.PrimordialBonus[data.Name]) or 0
+                        chStr = Util.formatOneIn(bProb * (1 + rb) * (gear.PrimordialMult or 1))
+                    end
+                end
+
+                if UI.Window then
+                    UI.Window:Notify({ title = "Primordial Event!", content = string.format("Teleported to %s (%s left)", data.Name, Util.formatDur(leftSec)), duration = 4 })
+                end
+                Webhook.primordial(
+                    "Primordial Event Joined: " .. data.Name,
+                    string.format("Teleported to **%s** (%s remaining)\nRod: %s • Luck: %.1fx (%s)\nCoffee: %s", data.Name, Util.formatDur(leftSec), gear.RodName, gear.TotalLuck, chStr, Coffee.getStatusSummary()),
+                    CONST.RARITY_COLORS.Primordial
+                )
+
+                task.delay(1.8, function()
+                    if curHrp and curHrp.Parent and State.Primordial.CurrentEvent == data.Key then
+                        if (curHrp.Position - data.CFrame.Position).Magnitude > 60 then
+                            State.Primordial.BlockedUntil[data.Key] = os.clock() + 120
+                            State.Primordial.CurrentEvent = nil
+                            Util.updateStatusTag()
+                            Webhook.alert("Primordial Snapback", string.format("Server moved player away from %s. Skipping for 2m.", data.Name), CONST.RARITY_COLORS.Alert)
+                        end
+                    end
+                end)
+
+            elseif kind == "Galatama" and data then
+                local box = Galatama.getBox(data.Area)
+                if not box then
+                    return
+                end
+                local alreadyInside = Galatama.isInsideBox(box, curHrp.Position)
+                local tpSuccess = false
+
+                if not alreadyInside then
+                    local tpMethod = State.Galatama.TpMethod
+                    local coins = tonumber(LocalPlayer:GetAttribute("Coins")) or 0
+                    local cfg = Cfg.get("GalatamaConfig")
+                    local tpCost = (cfg and tonumber(cfg.TeleportCost)) or 5000000
+                    local paidRem = Remotes.GalatamaTeleport
+
+                    local tryPaid = (tpMethod ~= "Free Area TP (LocationConfig)") and paidRem and paidRem.Parent and coins >= tpCost
+                    if tryPaid then
+                        if RodSys.findEquipped(curChar) then
+                            RodSys.unequip()
+                            task.wait(0.08)
+                        end
+                        local okT, resT = pcall(function()
+                            return paidRem:InvokeServer()
+                        end)
+                        if okT and type(resT) == "table" and (resT.ok == true or resT.msg == "inside") then
+                            tpSuccess = true
+                            task.wait(0.45)
+                        elseif tpMethod == "Paid Server TP (5M) Only" then
+                            local msg = (okT and type(resT) == "table" and tostring(resT.msg)) or "error"
+                            State.Galatama.BlockedUntil = os.clock() + 45
+                            if UI.Window and (os.clock() - State.Galatama.LastWarnAt) >= 30 then
+                                State.Galatama.LastWarnAt = os.clock()
+                                UI.Window:Notify({ title = "Galatama TP Failed", content = "Paid Teleport failed (" .. msg .. ") — retrying in 45s", duration = 4 })
+                            end
+                            return
+                        end
+                    elseif tpMethod == "Paid Server TP (5M) Only" then
+                        State.Galatama.BlockedUntil = os.clock() + 60
+                        if UI.Window and (os.clock() - State.Galatama.LastWarnAt) >= 45 then
+                            State.Galatama.LastWarnAt = os.clock()
+                            UI.Window:Notify({ title = "Galatama Skipped", content = "Paid TP Only requires 5M coins.", duration = 4 })
+                        end
+                        return
+                    end
+
+                    if not tpSuccess then
+                        local targetSpotCF = Galatama.findSafeFishingSpot(data.Area, box)
+                        if targetSpotCF then
+                            tpSuccess = Util.stealthTeleport(targetSpotCF, nil, 0.35)
+                        end
+                    end
+                else
+                    -- Inside bounding box already: ensure near water
+                    State.Galatama.LastAreaAdjustAt = os.clock()
+                    Water.refresh(false, true)
+                    if not State.IsNearWater then
+                        local targetSpotCF = Galatama.findSafeFishingSpot(data.Area, box)
+                        if targetSpotCF then
+                            tpSuccess = Util.stealthTeleport(targetSpotCF, nil, 0.35)
+                        end
+                    else
+                        tpSuccess = true
+                    end
+                end
+
+                if not tpSuccess then
+                    return
+                end
+
+                State.Primordial.CurrentEvent = nil
+                State.Magnet.InCrystalHollow = false
+                State.Galatama.InEvent = true
+                State.Galatama.JoinedArea = data.Area
+                State.Galatama.JoinedAt = os.clock()
+                State.Galatama.LastAreaAdjustAt = os.clock()
+                co.ActiveMode = "Galatama"
+                co.JustTeleportedUntil = os.clock() + 3
+                State.IsNearWater = true
+                State.IsFarmPausedNoWater = false
+                State.LastWaterScanPos = nil
+                State.LastWaterHitPos = nil
+                State.LastCastSentAt = 0
+                Util.updateStatusTag()
+
+                Water.refresh(false, true)
+                if State.Primordial.SwapEventRod then
+                    RodSys.recheckBestRod()
+                elseif RodSys.canAutoEquip() then
+                    RodSys.equip()
+                end
+                if State.Coffee.Enabled and Coffee.shouldTriggerNow() then
+                    task.delay(0.8, Coffee.evaluate)
+                end
+
+                local gear = Monitor.getGearSummary(true)
+                if UI.Window then
+                    UI.Window:Notify({
+                        title = "Galatama Joined!",
+                        content = string.format("%s • %s (%s left)", data.Area, data.Mode ~= "" and data.Mode or "Tourney", Util.formatDur(data.LeftSec)),
+                        duration = 4,
+                    })
+                end
+                Webhook.galatamaMagnet(
+                    "Galatama Joined: " .. tostring(data.Area),
+                    string.format("Mode: **%s** (%s remaining • Prize x%.2f)\nRod: %s (%.1fx)", tostring(data.Mode), Util.formatDur(data.LeftSec), data.PrizeScale, gear.RodName, gear.TotalLuck),
+                    CONST.RARITY_COLORS.Galatama
+                )
+
+                task.delay(1.8, function()
+                    if curHrp and curHrp.Parent and State.Galatama.InEvent then
+                        local chkBox = Galatama.getBox(data.Area)
+                        if chkBox and not Galatama.isInsideBox(chkBox, curHrp.Position) then
+                            State.Galatama.BlockedUntil = os.clock() + 90
+                            State.Galatama.InEvent = false
+                            Util.updateStatusTag()
+                            Webhook.alert("Galatama Snapback", string.format("Moved outside %s — cooling down 90s.", data.Area), CONST.RARITY_COLORS.Alert)
+                        end
+                    end
+                end)
+
+            elseif kind == "CrystalHollow" then
+                pcall(function()
+                    LocalPlayer:RequestStreamAroundAsync(CONST.CRYSTAL_HOLLOW_POS)
+                end)
+                task.wait(0.25)
+
+                local lookTarget = nil
+                local wHit = Water.findNearestHit(CONST.CRYSTAL_HOLLOW_POS, 36)
+                if wHit then
+                    lookTarget = Vector3.new(wHit.Position.X, CONST.CRYSTAL_HOLLOW_POS.Y, wHit.Position.Z)
+                end
+                local destCF = lookTarget
+                    and CFrame.lookAt(CONST.CRYSTAL_HOLLOW_POS, lookTarget)
+                    or CFrame.new(CONST.CRYSTAL_HOLLOW_POS)
+
+                if not Util.stealthTeleport(destCF, nil, 0.35) then
+                    return
+                end
+
+                State.Galatama.InEvent = false
+                State.Primordial.CurrentEvent = nil
+                State.Magnet.InCrystalHollow = true
+                co.ActiveMode = "CrystalHollow"
+                co.JustTeleportedUntil = os.clock() + 4
+                State.IsNearWater = true
+                State.IsFarmPausedNoWater = false
+                State.LastWaterScanPos = nil
+                State.LastWaterHitPos = nil
+                State.LastCastSentAt = 0
+                Util.updateStatusTag()
+
+                Water.refresh(false, true)
+                RodSys.recheckBestRod()
+
+                if UI.Window then
+                    UI.Window:Notify({ title = "Crystal Hollow Standby", content = "Farming crystals until Galatama / Primordial event.", duration = 4 })
+                end
+
+                task.delay(1.8, function()
+                    if curHrp and curHrp.Parent and State.Magnet.InCrystalHollow then
+                        if (curHrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude > 60 then
+                            State.Magnet.StandbyBlockedUntil = os.clock() + 120
+                            State.Magnet.InCrystalHollow = false
+                            Util.updateStatusTag()
+                            Webhook.alert("Crystal Hollow Snapback", "Moved out of Saujana Crystal Hollow. Cooling down 2m.", CONST.RARITY_COLORS.Alert)
+                        end
+                    end
+                end)
+
+            elseif kind == "ReturnHome" and data then
+                if not Util.stealthTeleport(data, nil, 0.35) then
+                    return
+                end
+
+                State.Galatama.InEvent = false
+                State.Primordial.CurrentEvent = nil
+                State.Magnet.InCrystalHollow = false
+                co.HomeCFrame = nil
+                co.ActiveMode = "Normal"
+                co.JustTeleportedUntil = os.clock() + 3
+                State.IsNearWater = true
+                State.IsFarmPausedNoWater = false
+                State.LastWaterScanPos = nil
+                State.LastWaterHitPos = nil
+                State.LastCastSentAt = 0
+                Util.updateStatusTag()
+
+                Water.refresh(false, true)
+                if State.Primordial.SwapEventRod then
+                    RodSys.recheckBestRod()
+                elseif RodSys.canAutoEquip() then
+                    RodSys.equip()
+                end
+                if UI.Window then
+                    UI.Window:Notify({ title = "Returned Home", content = "Event ended — returned to your normal fishing spot", duration = 3 })
+                end
+            end
+        end)
+
+        co.IsTeleporting = false
+    end)
+end
+
+function Coordinator.evaluate()
+    local co = State.Coordinator
+    if co.IsTeleporting or State.Coffee.IsDrinking or State.Maze.IsRunning or State.InAfkServer then
+        return
+    end
+    if (os.clock() - co.LastTeleportAt) < 3 then
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        return
+    end
+
+    local desiredKind, desiredData = Coordinator.resolveDesired()
+
+    if desiredKind == "Galatama" then
+        local needsTP = (not State.Galatama.InEvent)
+            or (State.Galatama.JoinedArea ~= desiredData.Area)
+            or Galatama.needsTeleport(desiredData.Area, hrp)
+        if needsTP then
+            Coordinator.transition("Galatama", desiredData)
+        end
+    elseif desiredKind == "Primordial" then
+        local needsTP = (State.Primordial.CurrentEvent ~= desiredData.Key)
+            or ((hrp.Position - desiredData.CFrame.Position).Magnitude > 60)
+        if needsTP then
+            Coordinator.transition("Primordial", desiredData)
+        end
+    elseif desiredKind == "CrystalHollow" then
+        local needsTP = (not State.Magnet.InCrystalHollow)
+            or ((hrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude > 60)
+        if needsTP then
+            Coordinator.transition("CrystalHollow", nil)
+        end
+    elseif desiredKind == "ReturnHome" then
+        Coordinator.transition("ReturnHome", desiredData)
+    else
+        if State.Galatama.InEvent or State.Primordial.CurrentEvent ~= nil or State.Magnet.InCrystalHollow then
+            State.Galatama.InEvent = false
+            State.Primordial.CurrentEvent = nil
+            State.Magnet.InCrystalHollow = false
+            co.ActiveMode = "Normal"
+            Util.updateStatusTag()
+            if State.Primordial.SwapEventRod then
+                RodSys.recheckBestRod()
+            end
+        end
     end
 end
 
@@ -4493,6 +5521,12 @@ function RodSys.score(rodName, obj)
                 score -= 10000
             end
         end
+    elseif State.Magnet.InCrystalHollow then
+        if Magnet.isRodValidForCrystal(rodName) then
+            score += 10000
+        else
+            score -= 10000
+        end
     end
 
     return score
@@ -4608,7 +5642,7 @@ function RodSys.findBestContentTarget()
 end
 
 function RodSys.canAutoEquip()
-    if not State.EnabledAutoEquip or State.Coffee.IsDrinking or State.Coffee.HoldingTool or State.Maze.IsRunning or State.Primordial.IsTeleporting or State.InAfkServer then
+    if not State.EnabledAutoEquip or State.Coffee.IsDrinking or State.Coffee.HoldingTool or State.Maze.IsRunning or State.Coordinator.IsTeleporting or State.InAfkServer then
         return false
     end
     if State.EnabledPauseNoWater and State.IsFarmPausedNoWater then
@@ -4736,6 +5770,7 @@ function Binder.onAfkServerChanged()
         Webhook.alert("Returned to Main Server", "Left AFK Server (InAfkServer = false).", CONST.RARITY_COLORS.Resume, true)
         task.delay(1, function()
             Water.refresh(false, true)
+            Coordinator.evaluate()
         end)
     end
 end
@@ -4748,6 +5783,29 @@ function Binder.bindServerRemote(remote)
     Remotes.Server = remote
     if remote then
         Conns.Server = remote.OnClientEvent:Connect(Reel.onServerEvent)
+    end
+end
+
+function Binder.bindCrystalFxRemote(remote)
+    if Conns.CrystalFx then
+        Conns.CrystalFx:Disconnect()
+        Conns.CrystalFx = nil
+    end
+    Remotes.CrystalFx = remote
+    if remote then
+        Conns.CrystalFx = remote.OnClientEvent:Connect(Magnet.onCrystalFx)
+    end
+end
+
+function Binder.bindGalatamaRemotes()
+    if Remotes.GalatamaBoard and Remotes.GalatamaBoard.Parent and not Conns.GalatamaBoard then
+        Conns.GalatamaBoard = Remotes.GalatamaBoard.OnClientEvent:Connect(Galatama.onBoard)
+    end
+    if Remotes.GalatamaNotify and Remotes.GalatamaNotify.Parent and not Conns.GalatamaNotify then
+        Conns.GalatamaNotify = Remotes.GalatamaNotify.OnClientEvent:Connect(Galatama.onNotify)
+    end
+    if Remotes.GalatamaResult and Remotes.GalatamaResult.Parent and not Conns.GalatamaResult then
+        Conns.GalatamaResult = Remotes.GalatamaResult.OnClientEvent:Connect(Galatama.onResult)
     end
 end
 
@@ -4821,8 +5879,8 @@ function Binder.bindBarFill(bar)
                 return
             end
             local col = fill.BackgroundColor3
-            local isGreen = (col.G > 0.7 and col.G > col.R and col.G > col.B) or
-                            (math.abs(col.R * 255 - 100) < 30 and (col.G * 255) > 220 and math.abs(col.B * 255 - 100) < 30)
+            local isGreen = (col.G > 0.7 and col.G > col.R and col.G > col.B)
+                or (math.abs(col.R * 255 - 100) < 30 and (col.G * 255) > 220 and math.abs(col.B * 255 - 100) < 30)
             if isGreen then
                 Reel.fire()
             end
@@ -4951,6 +6009,8 @@ function Binder.resolveRemotes()
             { "SetAuto", "SetAuto" },
             { "GetState", "GetState" },
             { "GetFish", "GetFish" },
+            { "CrystalDrop", "CrystalDrop" },
+            { "MagnetUpgrade", "MagnetUpgrade" },
         },
         CoffeeRemotes = {
             { "CoffeeBrew", "Brew" },
@@ -4975,6 +6035,12 @@ function Binder.resolveRemotes()
             { "EventGet", "Get" },
             { "EventClaim", "Claim" },
         },
+        GalatamaRemotes = {
+            { "GalatamaTeleport", "Teleport" },
+            { "GalatamaBoard", "Board" },
+            { "GalatamaNotify", "Notify" },
+            { "GalatamaResult", "Result" },
+        },
     }
 
     for folderName, pairsList in pairs(map) do
@@ -4996,6 +6062,12 @@ function Binder.resolveRemotes()
                 Binder.bindServerRemote(srv)
             end
         end
+        if not Binder.isRemoteValid(Remotes.CrystalFx) then
+            local cfx = fr:FindFirstChild("CrystalFx")
+            if cfx then
+                Binder.bindCrystalFxRemote(cfx)
+            end
+        end
         if not Binder.isRemoteValid(Remotes.Fx) then
             local fx = fr:FindFirstChild("Fx")
             if fx then
@@ -5009,6 +6081,7 @@ function Binder.resolveRemotes()
         end
     end
 
+    Binder.bindGalatamaRemotes()
     return Binder.isRemoteValid(Remotes.Cast)
 end
 
@@ -5020,6 +6093,8 @@ function Binder.allRemotesReady()
         "SetAuto",
         "Server",
         "Fx",
+        "CrystalFx",
+        "MagnetUpgrade",
         "GetState",
         "GetFish",
         "CoffeeBrew",
@@ -5030,6 +6105,10 @@ function Binder.allRemotesReady()
         "SoreKrakenQuest",
         "EventGet",
         "EventClaim",
+        "GalatamaTeleport",
+        "GalatamaBoard",
+        "GalatamaNotify",
+        "GalatamaResult",
     }) do
         if not Binder.isRemoteValid(Remotes[key]) then
             return false
@@ -5062,9 +6141,7 @@ function Binder.bindCharacter(char)
     if RodSys.canAutoEquip() then
         RodSys.equip()
     end
-    if State.Primordial.Enabled then
-        task.defer(Primordial.evaluate)
-    end
+    task.defer(Coordinator.evaluate)
     if State.Coffee.Enabled then
         task.defer(Coffee.evaluate)
     end
@@ -5188,8 +6265,8 @@ function Engine.slowTick(now)
         State.Coffee.IsDrinking = false
         Coffee.syncHeldFlag()
     end
-    if State.Primordial.IsTeleporting and (now - State.Primordial.TeleportStartedAt) >= 20 then
-        State.Primordial.IsTeleporting = false
+    if State.Coordinator.IsTeleporting and (now - State.Coordinator.TeleportStartedAt) >= 20 then
+        State.Coordinator.IsTeleporting = false
     end
     if State.Maze.IsRunning and (now - State.Maze.StartedAt) >= 160 then
         State.Maze.IsRunning = false
@@ -5205,9 +6282,14 @@ function Engine.slowTick(now)
         end
     end
 
-    if State.Primordial.Enabled and (now - State.Primordial.LastCheckAt) >= 2 then
-        State.Primordial.LastCheckAt = now
-        Primordial.evaluate()
+    if (now - State.Coordinator.LastCheckAt) >= 2 then
+        State.Coordinator.LastCheckAt = now
+        Coordinator.evaluate()
+    end
+
+    if State.Magnet.AutoUpgrade and (now - State.Magnet.LastUpgradeCheckAt) >= 6 then
+        State.Magnet.LastUpgradeCheckAt = now
+        Magnet.evaluateUpgrade()
     end
 
     if State.Coffee.Enabled and not State.BiteActive then
@@ -5221,7 +6303,8 @@ function Engine.slowTick(now)
 
     if State.Maze.AutoDaily
         and not State.InAfkServer
-        and not State.Primordial.IsTeleporting
+        and not State.Coordinator.IsTeleporting
+        and not State.Galatama.InEvent
         and not State.Primordial.CurrentEvent
         and not State.Coffee.IsDrinking
         and not State.Maze.IsRunning
@@ -5239,7 +6322,7 @@ function Engine.slowTick(now)
 
     if (State.EnabledPauseNoWater or State.EnabledSmartWaterAim)
         and not State.BiteActive
-        and not State.Primordial.IsTeleporting
+        and not State.Coordinator.IsTeleporting
         and not State.Coffee.IsDrinking
         and not State.Maze.IsRunning
         and not State.InAfkServer
@@ -5273,7 +6356,7 @@ function Engine.slowTick(now)
         end
     end
 
-    if State.EnabledGameAutoCast and not State.IsFarmPausedNoWater and not State.Primordial.IsTeleporting and not State.Maze.IsRunning and not State.InAfkServer and (now - State.LastAutoCheckTime) >= 4 then
+    if State.EnabledGameAutoCast and not State.IsFarmPausedNoWater and not State.Coordinator.IsTeleporting and not State.Maze.IsRunning and not State.InAfkServer and (now - State.LastAutoCheckTime) >= 4 then
         State.LastAutoCheckTime = now
         if Cache.AutoBtn and not GameAuto.isOn() then
             GameAuto.set(true)
@@ -5312,7 +6395,7 @@ function Engine.mainLoop()
 
     if State.EnabledCast
         and Binder.isRemoteValid(castRem)
-        and not State.Primordial.IsTeleporting
+        and not State.Coordinator.IsTeleporting
         and not State.Coffee.IsDrinking
         and not State.Maze.IsRunning
         and not State.InAfkServer then
@@ -5358,6 +6441,7 @@ end
 function Engine.updateLoop()
     local shouldRun = (State.EnabledCast or State.EnabledClick or State.EnabledReel or State.EnabledFastSafeReel
         or State.EnabledSell or State.EnabledGameAutoCast or State.EnabledAutoEquip or State.Primordial.Enabled
+        or State.Galatama.Enabled or State.Magnet.AutoUpgrade or State.Magnet.CrystalHollowStandby
         or State.Coffee.Enabled or (State.Quests.Mode ~= "Disabled") or State.Maze.AutoDaily
         or (State.Webhook.Enabled and State.Webhook.PeriodicReport))
     if shouldRun then
@@ -5375,7 +6459,6 @@ function Engine.updateLoop()
 end
 
 -- ==================== APPLY STARTUP GRAPHICS, MUSIC & LOADING SCREEN ====================
-State.LastBaitRefreshAt = 0
 Perf.setMusicGenre(State.Perf.MusicGenre, false)
 if State.Perf.LowestGraphics then
     Perf.applyLowestGraphics()
@@ -5408,7 +6491,9 @@ do
                     }, { __index = envGlobal })
                 end,
             }, { __index = baseEnv })
-            pcall(setfenv, chunk, safeEnv)
+            pcall(function()
+                setfenv(chunk, safeEnv)
+            end)
         end
         return chunk()
     end
@@ -5538,7 +6623,18 @@ do
         end)
     end
 
-    FarmTab:CreateSection({ name = "Events & Boosts" })
+    FarmTab:CreateSection({ name = "Events, Galatama & Magnet" })
+    UI.GalatamaToggle = FarmTab:CreateToggle({
+        name = "Auto Join Galatama",
+        description = "Joins Live Galatama tournaments (Lv.50+, prioritized over Primordial by default)",
+        flag = "AutoJoinGalatama",
+        value = true,
+        callback = function(v)
+            State.Galatama.Enabled = v
+            Engine.updateLoop()
+            task.defer(Coordinator.evaluate)
+        end,
+    })
     UI.PrimordialToggle = FarmTab:CreateToggle({
         name = "Auto TP Primordial Events",
         description = "Stealth-teleports to active Primordial spots (waits for bite)",
@@ -5547,11 +6643,34 @@ do
         callback = function(v)
             State.Primordial.Enabled = v
             Engine.updateLoop()
+            task.defer(Coordinator.evaluate)
+        end,
+    })
+    UI.AutoUpgradeMagnetToggle = FarmTab:CreateToggle({
+        name = "Auto Upgrade Magnet",
+        description = "Upgrades Magnet automatically when Coins & Crystals meet next level cost",
+        flag = "AutoUpgradeMagnet",
+        value = true,
+        callback = function(v)
+            State.Magnet.AutoUpgrade = v
+            State.Magnet.UpgradeCooldownUntil = 0
+            Engine.updateLoop()
             if v then
-                task.defer(Primordial.evaluate)
-            elseif State.Primordial.CurrentEvent and State.Primordial.ReturnHome and State.Primordial.HomeCFrame then
-                Primordial.teleportTo(State.Primordial.HomeCFrame, nil)
+                task.defer(Magnet.evaluateUpgrade)
             end
+        end,
+    })
+    UI.CrystalStandbyToggle = FarmTab:CreateToggle({
+        name = "Crystal Hollow Standby",
+        description = "Farms Saujana Crystal Hollow between events (Lv.90+, Tono unlocked, Wings Everlove+)",
+        flag = "CrystalHollowStandby",
+        value = State.Magnet.CrystalHollowStandby,
+        callback = function(v)
+            State.Magnet.CrystalHollowStandby = v
+            State.Magnet.StandbyBlockedUntil = 0
+            State.Magnet.WarnedTono = false
+            Engine.updateLoop()
+            task.defer(Coordinator.evaluate)
         end,
     })
     UI.AutoCoffeeToggle = FarmTab:CreateToggle({
@@ -5693,6 +6812,15 @@ do
         end,
     })
     WebTab:CreateToggle({
+        name = "Notify Galatama, Magnet & Crystals",
+        description = "Galatama joins/results, Magnet level-ups, and Crystal drops",
+        flag = "WebhookGalatamaMagnet",
+        value = true,
+        callback = function(v)
+            State.Webhook.NotifyGalatamaMagnet = v
+        end,
+    })
+    WebTab:CreateToggle({
         name = "Notify Quests, Event & Maze",
         description = "Claimed Playtime, Weekly, Sakura Event, Daily Login & Maze rewards",
         flag = "WebhookQuests",
@@ -5749,9 +6877,44 @@ end
 do
     local TuneTab = UI.Window:CreateTab({ name = "Tuning" })
 
-    TuneTab:CreateSection({ name = "Primordial Events" })
+    TuneTab:CreateSection({ name = "Galatama & Primordial Events" })
     TuneTab:CreateDropdown({
-        name = "Overlap Priority",
+        name = "Event Overlap Priority",
+        description = "Controls priority when Galatama & Primordial overlap (default: Galatama First)",
+        options = { "Galatama First", "Primordial First", "Galatama Only" },
+        value = "Galatama First",
+        flag = "GalatamaPriority",
+        callback = function(sel)
+            if type(sel) == "table" then
+                sel = sel[1]
+            end
+            if sel == "Primordial First" or sel == "Galatama Only" then
+                State.Galatama.Priority = sel
+            else
+                State.Galatama.Priority = "Galatama First"
+            end
+            task.defer(Coordinator.evaluate)
+        end,
+    })
+    TuneTab:CreateDropdown({
+        name = "Galatama TP Method",
+        description = "Free Area TP saves 5M coins; Paid TP uses server teleport",
+        options = { "Free Area TP (LocationConfig)", "Paid Server TP (5M) + Free Fallback", "Paid Server TP (5M) Only" },
+        value = "Free Area TP (LocationConfig)",
+        flag = "GalatamaTpMethod",
+        callback = function(sel)
+            if type(sel) == "table" then
+                sel = sel[1]
+            end
+            if sel == "Paid Server TP (5M) + Free Fallback" or sel == "Paid Server TP (5M) Only" then
+                State.Galatama.TpMethod = sel
+            else
+                State.Galatama.TpMethod = "Free Area TP (LocationConfig)"
+            end
+        end,
+    })
+    TuneTab:CreateDropdown({
+        name = "Primordial Overlap Priority",
         description = "Rarest First: Sore Kraken > Thalvyra > Celestra",
         options = { "Rarest First", "Newest First" },
         value = "Rarest First",
@@ -5761,9 +6924,7 @@ do
                 sel = sel[1]
             end
             State.Primordial.PriorityMode = (sel == "Newest First") and "Newest First" or "Rarest First"
-            if State.Primordial.Enabled then
-                task.defer(Primordial.evaluate)
-            end
+            task.defer(Coordinator.evaluate)
         end,
     })
     TuneTab:CreateToggle({
@@ -5778,7 +6939,7 @@ do
     })
     UI.ReturnHomeToggle = TuneTab:CreateToggle({
         name = "Return Home After Event",
-        description = "Always starts OFF on load so you keep fishing at the event spot",
+        description = "Always starts OFF on load so you keep fishing unless returning from events",
         flag = "ReturnHomeAfterEvent",
         value = false,
         callback = function(v)
@@ -5792,9 +6953,28 @@ do
         value = false,
         callback = function(v)
             State.Primordial.CheckUnlocks = v
-            if State.Primordial.Enabled then
-                task.defer(Primordial.evaluate)
-            end
+            task.defer(Coordinator.evaluate)
+        end,
+    })
+
+    if type(TuneTab.CreateDivider) == "function" then
+        pcall(function()
+            TuneTab:CreateDivider()
+        end)
+    end
+
+    TuneTab:CreateSection({ name = "Magnet & Crystal Hollow" })
+    TuneTab:CreateButton({
+        name = "Upgrade Magnet Now",
+        callback = function()
+            State.Magnet.UpgradeCooldownUntil = 0
+            Magnet.tryUpgrade(true)
+        end,
+    })
+    TuneTab:CreateButton({
+        name = "Show Magnet & Crystal Status",
+        callback = function()
+            UI.Window:Notify({ title = "Magnet Status", content = Magnet.getStatusSummary(), duration = 4 })
         end,
     })
 
@@ -5910,14 +7090,18 @@ do
     TuneTab:CreateDropdown({
         name = "When to Drink Coffee",
         description = "Primordial Events Only saves boosts for Primordial windows",
-        options = { "Primordial Events Only", "Always (24/7)" },
+        options = { "Primordial Events Only", "Events (Galatama + Primordial)", "Always (24/7)" },
         value = "Primordial Events Only",
         flag = "CoffeeTriggerMode",
         callback = function(sel)
             if type(sel) == "table" then
                 sel = sel[1]
             end
-            State.Coffee.TriggerMode = (sel == "Always (24/7)") and "Always (24/7)" or "Primordial Events Only"
+            if sel == "Always (24/7)" or sel == "Events (Galatama + Primordial)" then
+                State.Coffee.TriggerMode = sel
+            else
+                State.Coffee.TriggerMode = "Primordial Events Only"
+            end
             if State.Coffee.Enabled then
                 task.defer(Coffee.evaluate)
             end
@@ -6213,6 +7397,19 @@ end)
 Conns.InAfkServer = LocalPlayer:GetAttributeChangedSignal("InAfkServer"):Connect(Binder.onAfkServerChanged)
 Binder.onAfkServerChanged()
 
+Conns.MagnetLevel = LocalPlayer:GetAttributeChangedSignal("MagnetLevel"):Connect(function()
+    if State.Magnet.AutoUpgrade then
+        State.Magnet.UpgradeCooldownUntil = 0
+        task.delay(0.6, Magnet.evaluateUpgrade)
+    end
+end)
+
+Conns.GalaState = Svc.ReplicatedStorage:GetAttributeChangedSignal("GalaState"):Connect(function()
+    if State.Galatama.Enabled then
+        task.defer(Coordinator.evaluate)
+    end
+end)
+
 table.insert(Conns.Global, Svc.Gui.ErrorMessageChanged:Connect(function(errMsg)
     if errMsg and errMsg ~= "" then
         Webhook.alert("Disconnected from Server", tostring(errMsg), CONST.RARITY_COLORS.Alert, true)
@@ -6253,6 +7450,9 @@ task.spawn(function()
             Perf.suppressFxConnections(Remotes.Fx)
         end
         Quests.evaluateAll(true)
+        if State.Magnet.AutoUpgrade then
+            Magnet.evaluateUpgrade()
+        end
     end)
 end)
 
@@ -6261,7 +7461,10 @@ State.EnabledFastSafeReel = true
 State.EnabledColorReel = false
 State.EnabledGameAutoCast = false
 State.EnabledSmartWaterAim = true
+State.Galatama.Enabled = true
+State.Galatama.Priority = "Galatama First"
 State.Primordial.ReturnHome = false
+State.Magnet.AutoUpgrade = true
 State.Coffee.AllowFishTrade = true
 State.Coffee.AutoVisitFellicia = true
 Engine.updateLoop()
@@ -6271,6 +7474,12 @@ if UI.AutoCastToggle and UI.AutoCastToggle.Set then
 end
 if UI.FastSafeReelToggle and UI.FastSafeReelToggle.Set then
     UI.FastSafeReelToggle:Set(true)
+end
+if UI.GalatamaToggle and UI.GalatamaToggle.Set then
+    UI.GalatamaToggle:Set(true)
+end
+if UI.AutoUpgradeMagnetToggle and UI.AutoUpgradeMagnetToggle.Set then
+    UI.AutoUpgradeMagnetToggle:Set(true)
 end
 if UI.ColorReelToggle and UI.ColorReelToggle.Set then
     UI.ColorReelToggle:Set(false)
@@ -6316,8 +7525,9 @@ task.delay(2.5, function()
     if State.Perf.DisableCutscenes then
         Perf.applyCutsceneBlocker(true)
     end
-    if State.Primordial.Enabled then
-        Primordial.evaluate()
+    Coordinator.evaluate()
+    if State.Magnet.AutoUpgrade then
+        Magnet.evaluateUpgrade()
     end
     if State.Coffee.Enabled then
         Coffee.evaluate()
@@ -6330,7 +7540,7 @@ task.defer(function()
     pcall(function()
         UI.Window:Notify({
             title = "Saujana Hub v" .. SCRIPT_VERSION,
-            content = State.Webhook.Enabled and "Ready • All Systems + Webhook Active" or "Ready • All Systems Active",
+            content = State.Webhook.Enabled and "Ready • All Systems + Galatama/Magnet + Webhook Active" or "Ready • All Systems + Galatama/Magnet Active",
             duration = 4,
         })
     end)
