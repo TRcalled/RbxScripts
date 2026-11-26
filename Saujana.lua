@@ -1,4 +1,4 @@
-local SCRIPT_VERSION = "3.1.6"
+local SCRIPT_VERSION = "3.2.0"
 local TARGET_PLACE_ID = 89346234653070
 
 if not game:IsLoaded() then
@@ -101,6 +101,12 @@ local CONST = {
         Extreme = 30,
         Nightmare = 30,
     },
+    DEFAULT_WEATHER_PRICES = {
+        Rain = 40000000,
+        Storm = 75000000,
+        Meteor = 125000000,
+        Winter = 220000000,
+    },
     PERSONAL_BOOST_IDS = { "Coin", "Exp", "Supremacy", "Primordial" },
     FPS_ATTRS = {
         "HideTitles",
@@ -112,6 +118,7 @@ local CONST = {
         "HideOwnPet",
         "HideOtherPets",
         "HideWarPowerNotif",
+        "LowEndMode",
     },
     RARITY_RANK = {
         Common = 1,
@@ -147,6 +154,7 @@ local CONST = {
         BoostEventIntro = true,
         VipJoinNotifyUI = true,
         GalatamaResult = true,
+        UnlockBanner = true,
     },
     MUSIC_GENRES = { "All Mix", "Indonesia", "English", "DJ", "Japanese", "Philippines", "Malaysia", "Java" },
     COFFEE_DEFAULT_LIMIT = 5,
@@ -207,6 +215,28 @@ local CONST = {
         SoreKrakenHitFx = true,
         SoreAmuletFx = true,
         CoinGainFxUI = true,
+        WeatherFlash = true,
+        SoreKrakenSignArt = true,
+        ThalvyraSignArt = true,
+    },
+    BLUR_FX_NAMES = {
+        LevelUpBlur = true,
+        SaujanaCoffeeBlur = true,
+        VipBenefitsBlur = true,
+        UpdateLogBlur = true,
+        LemonadeGraphicsBlur = true,
+    },
+    WORKSPACE_FX_NAMES = {
+        SoreKrakenPreview = true,
+        CrystalCatch = true,
+        PyroGhost = true,
+        JewelGhost = true,
+    },
+    CAMERA_FX_NAMES = {
+        WeatherRain = true,
+        WeatherWind = true,
+        WeatherSnow = true,
+        WeatherMeteors = true,
     },
     CONFIG_LIST = {
         "FishConfig",
@@ -281,10 +311,14 @@ local Cache: { [string]: any } = {
     CoffeeNames = nil,
     CoffeeOrder = nil,
     AutoBtn = nil,
+    FishingGui = nil,
     RodContent = nil,
     ItemsFrame = nil,
     GearSummary = nil,
     GearSummaryAt = 0,
+    ServerStats = nil,
+    ServerStatsAt = 0,
+    SellFishCFrame = nil,
     VipCached = false,
     VipCheckedAt = 0,
     SafeUiContainer = nil,
@@ -871,8 +905,11 @@ local Remotes: { [string]: any } = {
     SellAll = nil,
     SetAuto = nil,
     GetState = nil,
+    GetStats = nil,
     GetFish = nil,
     ToggleFavorite = nil,
+    EquipRod = nil,
+    EquipBait = nil,
     Server = nil,
     Fx = nil,
     CrystalDrop = nil,
@@ -893,6 +930,9 @@ local Remotes: { [string]: any } = {
     DailyLoginGetState = nil,
     DailyLoginClaim = nil,
     SoreKrakenQuest = nil,
+    SoreKrakenKicked = nil,
+    SoreKrakenHit = nil,
+    ZoneGuardNotice = nil,
     EventGet = nil,
     EventClaim = nil,
     EventBloomPicked = nil,
@@ -900,23 +940,30 @@ local Remotes: { [string]: any } = {
     GalatamaBoard = nil,
     GalatamaNotify = nil,
     GalatamaResult = nil,
+    WeatherBuy = nil,
 }
 
 local Conns: { [string]: any } = {
     Global = {},
     Char = {},
     ModalConns = {},
+    EggConns = {},
     PrimNotif = {},
     DisabledFxConns = {},
     Gradient = nil,
     Server = nil,
     CrystalFx = nil,
+    CrystalDrop = nil,
     GalatamaBoard = nil,
     GalatamaNotify = nil,
     GalatamaResult = nil,
+    SoreKrakenKicked = nil,
+    SoreKrakenHit = nil,
+    ZoneGuardNotice = nil,
     Heartbeat = nil,
     WorkspaceFx = nil,
     LightingFx = nil,
+    CameraFx = nil,
     CameraType = nil,
     QuestPlaytime = nil,
     QuestWeekly = nil,
@@ -933,11 +980,13 @@ local UI: { [string]: any } = {
     AutoCastToggle = nil,
     GalatamaToggle = nil,
     PrimordialToggle = nil,
+    CheckUnlocksToggle = nil,
     AutoUpgradeMagnetToggle = nil,
     CrystalStandbyToggle = nil,
     ReturnHomeToggle = nil,
     GameAutoCastToggle = nil,
     FastSafeReelToggle = nil,
+    AutoEquipBaitToggle = nil,
     AutoCoffeeToggle = nil,
     PingSlider = nil,
 }
@@ -949,6 +998,7 @@ local State: { [string]: any } = {
     EnabledSell = false,
     EnabledGameAutoCast = false,
     EnabledAutoEquip = true,
+    EnabledAutoEquipBait = true,
     EnabledAutoClosePopups = true,
     EnabledPauseNoWater = true,
     EnabledSmartWaterAim = true,
@@ -960,10 +1010,12 @@ local State: { [string]: any } = {
     DetectedBait = nil,
     RodData = {
         rods = {},
+        baits = {},
         rodEnh = {},
         rodEnh2 = {},
         rodEnh3 = {},
         rodAsc = {},
+        sellEverywhere = false,
     },
     BagFishCounts = nil,
     BagFishCountsAt = 0,
@@ -971,6 +1023,7 @@ local State: { [string]: any } = {
     LastFavoritePassAt = 0,
     LastSlowTickAt = 0,
     LastBaitRefreshAt = 0,
+    LastBaitSwapAt = 0,
     LastSellTime = 0,
     ProactiveSellCooldownUntil = 0,
     LastCastSentAt = 0,
@@ -987,11 +1040,15 @@ local State: { [string]: any } = {
     LastWaterScanPos = nil,
     LastWaterHitPos = nil,
     IsSelling = false,
+    IsSellingTp = false,
+    SellingTpStartedAt = 0,
+    WarnedSellTooFar = false,
 
     IsNearWater = true,
     IsFarmPausedNoWater = false,
     InAfkServer = false,
     AfkEnteredAt = 0,
+    AfkNudged = false,
     CachedWaterDir = nil,
 
     WaitingForBite = false,
@@ -1028,7 +1085,7 @@ local State: { [string]: any } = {
 
     Primordial = {
         Enabled = true,
-        CheckUnlocks = false,
+        CheckUnlocks = true,
         PriorityMode = "Rarest First",
         SwapEventRod = true,
         ReturnHome = false,
@@ -1065,6 +1122,8 @@ local State: { [string]: any } = {
         UpgradeCooldownUntil = 0,
         StandbyBlockedUntil = 0,
         LastUpgradeCheckAt = 0,
+        LastCrystalFxAt = 0,
+        LastCrystalFxId = "",
         WarnedTono = false,
         SessionCrystals = { Verdant = 0, Azure = 0, Amethyst = 0 },
     },
@@ -1112,7 +1171,7 @@ local State: { [string]: any } = {
         LastPlaytimeAlert = "",
         LastWeeklyAlert = "",
         LastEventAlert = "",
-        LastDailyLoginUtcDay = nil,
+        LastDailyLoginDay = nil,
         DailyLoginNextCheckAt = 0,
         LastQuestCheckAt = 0,
         LastBloomCheckAt = 0,
@@ -1142,6 +1201,9 @@ local State: { [string]: any } = {
         DexterCooldownUntil = 0,
         LastDexterCheckAt = 0,
         DexterCFrame = nil,
+        AutoBuyWeather = "Off",
+        WeatherCooldownUntil = 0,
+        LastWeatherCheckAt = 0,
         IsBusy = false,
         BusyStartedAt = 0,
     },
@@ -1215,12 +1277,17 @@ envGlobal._AutoFishCleanup = function()
         "Heartbeat",
         "Server",
         "CrystalFx",
+        "CrystalDrop",
         "GalatamaBoard",
         "GalatamaNotify",
         "GalatamaResult",
+        "SoreKrakenKicked",
+        "SoreKrakenHit",
+        "ZoneGuardNotice",
         "Gradient",
         "WorkspaceFx",
         "LightingFx",
+        "CameraFx",
         "CameraType",
         "QuestPlaytime",
         "QuestWeekly",
@@ -1237,6 +1304,7 @@ envGlobal._AutoFishCleanup = function()
     end
     clearConnList(Conns.PrimNotif)
     clearConnList(Conns.ModalConns)
+    clearConnList(Conns.EggConns)
     clearConnList(Conns.Char)
     clearConnList(Conns.Global)
 end
@@ -1366,6 +1434,7 @@ function Util.isActionLocked()
         or State.Maze.IsRunning
         or State.Quests.IsCollectingBlooms
         or State.Extras.IsBusy
+        or State.IsSellingTp
 end
 
 function Monitor.syncRodState(st)
@@ -1378,7 +1447,10 @@ function Monitor.syncRodState(st)
         State.DetectedBait = st.equippedBait
         changed = true
     end
-    for _, k in ipairs({ "rods", "rodEnh", "rodEnh2", "rodEnh3", "rodAsc" }) do
+    if type(st.sellEverywhere) == "boolean" then
+        rd.sellEverywhere = st.sellEverywhere
+    end
+    for _, k in ipairs({ "rods", "baits", "rodEnh", "rodEnh2", "rodEnh3", "rodAsc" }) do
         if type(st[k]) == "table" then
             rd[k] = st[k]
             changed = true
@@ -1386,6 +1458,9 @@ function Monitor.syncRodState(st)
     end
     if changed then
         Cache.GearSummary = nil
+        if State.EnabledAutoEquipBait then
+            task.defer(RodSys.checkBestBait)
+        end
     end
 end
 
@@ -1401,6 +1476,26 @@ function Monitor.refreshState()
             end
         end)
     end
+end
+
+function Monitor.getServerStats(forceRefresh)
+    local now = os.clock()
+    if not forceRefresh and Cache.ServerStats and (now - Cache.ServerStatsAt) < 12 then
+        return Cache.ServerStats
+    end
+    local gst = Remotes.GetStats
+    if not gst or not gst.Parent then
+        return Cache.ServerStats
+    end
+    local okS, res = pcall(function()
+        return gst:InvokeServer()
+    end)
+    if okS and type(res) == "table" then
+        Cache.ServerStats = res
+        Cache.ServerStatsAt = now
+        return res
+    end
+    return Cache.ServerStats
 end
 
 function Monitor.detectVip()
@@ -1454,6 +1549,10 @@ function Monitor.getBoostTelemetry()
         local wEnd = tonumber(workspace:GetAttribute("WeatherEndsAt")) or 0
         local wLeft = wEnd > nowEp and (" (" .. Util.formatDur(wEnd - nowEp) .. ")") or ""
         table.insert(srvParts, wName .. wLeft)
+    end
+
+    if workspace:GetAttribute("IsNight") == true then
+        table.insert(srvParts, "Night (+7% Sell)")
     end
 
     if Svc.ReplicatedStorage:GetAttribute("GalaState") == "Live" then
@@ -1822,6 +1921,7 @@ function Webhook.buildReport(titleOverride, colorOverride)
     local snap = Monitor.snapshot()
     local gear = Monitor.getGearSummary()
     local boosts = Monitor.getBoostTelemetry()
+    local srvStats = Monitor.getServerStats(false)
     local bagCnt, bagLim = Monitor.getBagCounts()
     local lvlCfg = Cfg.get("LevelConfig")
     local m = State.Monitor
@@ -1880,12 +1980,33 @@ function Webhook.buildReport(titleOverride, colorOverride)
         rarText = rarText .. string.format("\nCrystals (Sess): V:%d | A:%d | Am:%d", sc.Verdant or 0, sc.Azure or 0, sc.Amethyst or 0)
     end
 
+    local pityStr = "--"
+    if type(srvStats) == "table" then
+        local mP, mG = math.floor(tonumber(srvStats.mythicPity) or 0), math.floor(tonumber(srvStats.mythicGuarantee) or 350)
+        local sP, sG = math.floor(tonumber(srvStats.secretPity) or 0), math.floor(tonumber(srvStats.secretGuarantee) or 2600)
+        local uP, uG = math.floor(tonumber(srvStats.supremacyPity) or 0), math.floor(tonumber(srvStats.supremacyGuarantee) or 5000)
+        local mCh = (tonumber(srvStats.mythicChance) or 0) * 100
+        local sCh = (tonumber(srvStats.secretChance) or 0) * 100
+        local uCh = (tonumber(srvStats.supremacyChance) or 0) * 100
+        local idxC, idxT = math.floor(tonumber(srvStats.indexCount) or 0), math.floor(tonumber(srvStats.indexTotal) or 0)
+        local petPct = math.floor((tonumber(srvStats.petLuck) or 0) * 100 + 0.5)
+        local permPct = math.floor((tonumber(srvStats.permLuck) or 0) * 100 + 0.5)
+        pityStr = string.format(
+            "Mythic: %d/%d (%.2f%%) | Secret: %d/%d (%.3f%%) | Sup: %d/%d (%.3f%%)\nIndex: %d/%d • Pet +%d%% • Pass +%d%% • Coins: %s",
+            math.min(mP, mG), mG, mCh,
+            math.min(sP, sG), sG, sCh,
+            math.min(uP, uG), uG, uCh,
+            idxC, idxT, petPct, permPct, Util.formatShort(tonumber(LocalPlayer:GetAttribute("Coins")) or 0)
+        )
+    end
+
     return {
         title = titleOverride or "Overnight Farm Report",
         color = colorOverride or CONST.RARITY_COLORS.Report,
         fields = {
             { name = "Player & Status", value = string.format("%s (@%s)\n%s • Uptime: %s\nLocation: %s", LocalPlayer.DisplayName, LocalPlayer.Name, statusText, Util.formatClock(snap.elapsed), locText), inline = true },
             { name = "Gear, Bag & Coffee", value = string.format("%s%s • %s (Luck %.1fx)\nBag: %s • Coffee: %s", gear.RodName, ascStr, gear.BaitName, gear.TotalLuck, bagText, coffeeStr), inline = true },
+            { name = "Pity, Index & Wallet", value = pityStr, inline = false },
             { name = "Magnet & Crystals", value = magStr, inline = false },
             { name = "Active Boosts", value = string.format("Server: %s\nPersonal: %s", boosts.ServerSummary, boosts.PersonalSummary), inline = false },
             { name = "Catch Rates", value = string.format("Live: **%s/hr** (%.1f/m)\nAvg: %s/hr | Cycle: %.2fs", Util.formatNum(snap.liveFishPerHr), snap.liveFishPerMin, Util.formatNum(snap.sessionFishPerHr), snap.avgCycle), inline = true },
@@ -2277,6 +2398,15 @@ function GameAuto.bindGradient(autoBtn)
     end
 end
 
+function Reel.hideMinigameBar()
+    if Cache.FishingGui and Cache.FishingGui.Parent then
+        local fr = Cache.FishingGui:FindFirstChild("Fishing")
+        if fr and fr:IsA("GuiObject") and fr.Visible then
+            fr.Visible = false
+        end
+    end
+end
+
 function Reel.closeModalPopup(gui)
     if not State.EnabledAutoClosePopups or not gui or not gui.Parent then
         return
@@ -2378,6 +2508,56 @@ function Reel.bindModalPopup(gui)
     end
 end
 
+function Reel.bindPetEggGui(gui)
+    if not gui or gui.Name ~= "PetEggGui" then
+        return
+    end
+    clearConnList(Conns.EggConns)
+    local function dismissEggGui()
+        if not gui.Parent or not gui.Enabled then
+            return
+        end
+        if not State.EnabledAutoClosePopups and not State.Perf.DisableCutscenes then
+            return
+        end
+        task.spawn(function()
+            local deadline = os.clock() + 12
+            while gui.Parent and gui.Enabled and os.clock() < deadline do
+                if not State.EnabledAutoClosePopups and not State.Perf.DisableCutscenes then
+                    break
+                end
+                local skipAll = gui:FindFirstChild("SkipAll", true)
+                local skipBtn = gui:FindFirstChild("Skip", true)
+                local summary = gui:FindFirstChild("Summary", true)
+                local closeBtn = summary and summary:FindFirstChild("Close", true)
+                local dimBtn = gui:FindFirstChild("Dim", true)
+                if skipAll and skipAll:IsA("GuiButton") and skipAll.Visible then
+                    Util.triggerBtn(skipAll)
+                elseif skipBtn and skipBtn:IsA("GuiButton") and skipBtn.Visible then
+                    Util.triggerBtn(skipBtn)
+                end
+                if closeBtn and closeBtn:IsA("GuiButton") then
+                    Util.triggerBtn(closeBtn)
+                end
+                if dimBtn and dimBtn:IsA("GuiButton") then
+                    Util.triggerBtn(dimBtn)
+                end
+                task.wait(0.25)
+            end
+        end)
+    end
+    if gui:IsA("LayerCollector") then
+        table.insert(Conns.EggConns, gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            if gui.Enabled then
+                dismissEggGui()
+            end
+        end))
+        if gui.Enabled then
+            dismissEggGui()
+        end
+    end
+end
+
 function Reel.updatePingSlider()
     local slider = UI.PingSlider
     if slider and type(slider.Set) == "function" then
@@ -2418,6 +2598,7 @@ function Reel.fire()
     pcall(function()
         reelRem:FireServer(true)
     end)
+    Reel.hideMinigameBar()
 end
 
 function Reel.favoriteEligibleFish()
@@ -2474,7 +2655,7 @@ function Reel.favoriteEligibleFish()
     return starred
 end
 
-function Reel.invokeSellAll(isProactive)
+function Reel.invokeSellAll(isProactive, forceTrip)
     local sellRem = Remotes.SellAll
     if not sellRem or not sellRem.Parent or State.IsSelling then
         return
@@ -2489,13 +2670,50 @@ function Reel.invokeSellAll(isProactive)
         local okS, res, info = pcall(function()
             return sellRem:InvokeServer()
         end)
-        State.IsSelling = false
         State.BagFishCounts = nil
-        if okS and (res == false or info == 0 or info == "Nothing" or info == "TooFar") then
+        if okS and res == false and info == "TooFar" then
+            local bagCnt, bagLim = Monitor.getBagCounts()
+            local isNearFull = forceTrip or (bagCnt ~= nil and bagLim > 0 and bagCnt >= (bagLim - 4))
+            if isNearFull and not State.InAfkServer and not Util.isActionLocked() and not State.BiteActive then
+                local sCF = Util.findNpcCFrame("SellFish", Cache, "SellFishCFrame")
+                if sCF then
+                    State.IsSellingTp = true
+                    State.SellingTpStartedAt = os.clock()
+                    pcall(function()
+                        Util.waitIdleCast()
+                        local char = LocalPlayer.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if char and hrp and hum and hum.Health > 0 then
+                            local savedCF = Coordinator.getResumeCFrame(hrp.CFrame)
+                            if Util.stealthTeleport(sCF * CFrame.new(0, 0, -4), sCF.Position, 0) then
+                                pcall(function()
+                                    sellRem:InvokeServer()
+                                end)
+                                task.wait(0.2)
+                                Util.stealthTeleport(savedCF, nil, 0.35)
+                            end
+                        end
+                    end)
+                    State.IsSellingTp = false
+                    Water.refresh(false, true)
+                    if RodSys.canAutoEquip() then
+                        task.delay(0.2, RodSys.equip)
+                    end
+                elseif not State.WarnedSellTooFar and UI.Window then
+                    State.WarnedSellTooFar = true
+                    UI.Window:Notify({ title = "Auto Sell Warning", content = "Too far from SellFish NPC & Sell Everywhere not owned.", duration = 4 })
+                end
+                State.ProactiveSellCooldownUntil = os.clock() + 10
+            else
+                State.ProactiveSellCooldownUntil = os.clock() + State.SellInterval
+            end
+        elseif okS and (res == false or info == 0 or info == "Nothing") then
             State.ProactiveSellCooldownUntil = os.clock() + State.SellInterval
         elseif isProactive then
             State.ProactiveSellCooldownUntil = os.clock() + 3
         end
+        State.IsSelling = false
     end)
 end
 
@@ -2507,6 +2725,9 @@ function Reel.onCleanCatch(now)
     State.ConsecutiveCatches += 1
     State.ConsecutiveInvalidFails = 0
     State.ConsecutiveBusyFails = 0
+    if State.EnabledFastSafeReel then
+        Reel.hideMinigameBar()
+    end
 
     local m = State.Monitor
     if m.LastCatchTime > 0 and (now - m.LastCatchTime) <= 60 then
@@ -2581,7 +2802,7 @@ function Reel.onServerEvent(eventName, data)
         if State.EnabledSell and now >= State.ProactiveSellCooldownUntil then
             local bagCnt, bagLim = Monitor.getBagCounts()
             if bagCnt ~= nil and bagLim > 0 and bagCnt >= (bagLim - 2) then
-                Reel.invokeSellAll(true)
+                Reel.invokeSellAll(true, true)
             end
         end
     elseif eventName == "Failed" then
@@ -2622,6 +2843,8 @@ function Reel.onServerEvent(eventName, data)
             if State.ConsecutiveInvalidFails >= 5 then
                 Webhook.alert("Repeated 'Invalid' Fails Detected", string.format("%d consecutive Invalid fails. Ping Buffer: %.2fs.", State.ConsecutiveInvalidFails, State.PingBuffer), CONST.RARITY_COLORS.Alert)
             end
+        elseif reason == "Full" and State.EnabledSell and not State.IsSelling then
+            Reel.invokeSellAll(true, true)
         end
     elseif eventName == "CastFail" and type(data) == "table" then
         if data.reason == "Busy" then
@@ -2648,7 +2871,7 @@ function Reel.onServerEvent(eventName, data)
                 State.LastWaterCheckAt = now
                 Water.refresh(true, true)
             elseif data.reason == "Full" and State.EnabledSell and not State.IsSelling then
-                Reel.invokeSellAll(true)
+                Reel.invokeSellAll(true, true)
             end
         end
     end
@@ -3763,28 +3986,37 @@ function Quests.collectSakuraBlooms()
                     if not prompt.Enabled then
                         prompt.Enabled = true
                     end
+                    local gotIt = false
                     if firePromptFn then
                         pcall(function()
                             firePromptFn(prompt)
                         end)
-                    else
+                        task.wait(0.3)
+                        local curStr = tostring(LocalPlayer:GetAttribute("EventBlooms") or "")
+                        if string.find(curStr, "," .. tostring(item.id) .. ",", 1, true) then
+                            gotIt = true
+                        end
+                    end
+                    if not gotIt then
                         pcall(function()
                             prompt:InputHoldBegin()
                         end)
-                        task.wait((tonumber(prompt.HoldDuration) or 0.5) + 0.15)
+                        task.wait((tonumber(prompt.HoldDuration) or 0.5) + 0.18)
                         pcall(function()
                             prompt:InputHoldEnd()
                         end)
-                    end
-
-                    local waitPick = os.clock()
-                    while (os.clock() - waitPick) < 1.2 do
-                        local curStr = tostring(LocalPlayer:GetAttribute("EventBlooms") or "")
-                        if string.find(curStr, "," .. tostring(item.id) .. ",", 1, true) then
-                            picked += 1
-                            break
+                        local waitPick = os.clock()
+                        while (os.clock() - waitPick) < 1.2 do
+                            local curStr = tostring(LocalPlayer:GetAttribute("EventBlooms") or "")
+                            if string.find(curStr, "," .. tostring(item.id) .. ",", 1, true) then
+                                gotIt = true
+                                break
+                            end
+                            task.wait(0.1)
                         end
-                        task.wait(0.1)
+                    end
+                    if gotIt then
+                        picked += 1
                     end
                 end
             end
@@ -3818,10 +4050,12 @@ function Quests.checkDailyLogin(forceCheck)
         return
     end
 
-    local utcDay = Coffee.utcDay()
+    local dlCfg = Cfg.get("DailyLoginConfig")
+    local tzOff = (dlCfg and tonumber(dlCfg.TimezoneOffsetHours)) or 7
     local nowEp = Util.serverNow()
+    local curDay = math.floor((nowEp + tzOff * 3600) / 86400)
     if not forceCheck then
-        local dayDone = (q.LastDailyLoginUtcDay == utcDay)
+        local dayDone = (q.LastDailyLoginDay == curDay)
         local timerReady = (q.DailyLoginNextCheckAt > 0 and nowEp >= q.DailyLoginNextCheckAt)
         if dayDone and not timerReady then
             return
@@ -3837,7 +4071,7 @@ function Quests.checkDailyLogin(forceCheck)
             return
         end
 
-        q.LastDailyLoginUtcDay = utcDay
+        q.LastDailyLoginDay = curDay
 
         if st.canClaim == true then
             if q.Mode == "Notify Only" then
@@ -4231,7 +4465,7 @@ function Extras.checkAqualith()
 
     ex.IsBusy = true
     ex.BusyStartedAt = now
-    local totalWished, totalCoins, totalTix = 0, 0, 0
+    local totalWished, totalCoins, totalTix, totalCoffeTix = 0, 0, 0, 0
 
     pcall(function()
         Util.waitIdleCast()
@@ -4288,6 +4522,8 @@ function Extras.checkAqualith()
                     totalCoins += (tonumber(rw.coins) or 0)
                     if rw.kind == "Ticket" then
                         totalTix += (tonumber(rw.count) or 1)
+                    elseif rw.kind == "CoffeeTicket" then
+                        totalCoffeTix += (tonumber(rw.count) or 1)
                     end
                 end
                 task.wait(0.35)
@@ -4308,7 +4544,10 @@ function Extras.checkAqualith()
         State.BagFishCounts = nil
         local summary = string.format("Wished x%d Secret -> +%s coins", totalWished, Util.formatShort(totalCoins))
         if totalTix > 0 then
-            summary = summary .. " + " .. tostring(totalTix) .. " Ticket(s)"
+            summary = summary .. " + " .. tostring(totalTix) .. " Enh Ticket"
+        end
+        if totalCoffeTix > 0 then
+            summary = summary .. " + " .. tostring(totalCoffeTix) .. " Coffee Ticket"
         end
         Quests.notify("Aqualith Wishes Complete", summary, CONST.RARITY_COLORS.Crystal)
     elseif ex.AqualithCooldownUntil <= now then
@@ -4403,8 +4642,8 @@ function Extras.checkDexter()
         local savedCF = nil
         local hopped = false
         if okG and type(resG) == "table" and not resG.ok and resG.reason == "Far" then
-            local npcName = (dxCfg and dxCfg.NpcModel) or "Minez Dexter"
-            local dCF = Util.findNpcCFrame(npcName, ex, "DexterCFrame")
+            local npcName = (dxCfg and dxCfg.NpcModel) or "Dexter"
+            local dCF = Util.findNpcCFrame(npcName, ex, "DexterCFrame") or Util.findNpcCFrame("Minez Dexter", ex, "DexterCFrame")
             if dCF then
                 savedCF = Coordinator.getResumeCFrame(hrp.CFrame)
                 if Util.stealthTeleport(dCF * CFrame.new(0, 0, -4), dCF.Position, 0) then
@@ -4442,6 +4681,52 @@ function Extras.checkDexter()
     if RodSys.canAutoEquip() then
         task.delay(0.2, RodSys.equip)
     end
+end
+
+function Extras.checkWeatherBuy()
+    local ex = State.Extras
+    local sel = ex.AutoBuyWeather
+    if sel == "Off" or State.InAfkServer then
+        return
+    end
+    local now = os.clock()
+    if now < ex.WeatherCooldownUntil then
+        return
+    end
+    local wRem = Remotes.WeatherBuy
+    if not wRem or not wRem.Parent then
+        return
+    end
+    local wKey = string.match(sel, "^(%a+)")
+    if not wKey or not CONST.DEFAULT_WEATHER_PRICES[wKey] then
+        return
+    end
+    local curWeather = tostring(workspace:GetAttribute("Weather") or "Clear")
+    if curWeather ~= "Clear" and curWeather ~= "" then
+        ex.WeatherCooldownUntil = now + 20
+        return
+    end
+    local qAttr = tostring(workspace:GetAttribute("WeatherQueue") or "[]")
+    if qAttr ~= "[]" and qAttr ~= "" then
+        ex.WeatherCooldownUntil = now + 20
+        return
+    end
+    local wCfg = Cfg.get("WeatherConfig")
+    local price = (wCfg and wCfg.Price and wCfg.Price[wKey] and tonumber(wCfg.Price[wKey].Coins)) or CONST.DEFAULT_WEATHER_PRICES[wKey]
+    local myCoins = tonumber(LocalPlayer:GetAttribute("Coins")) or 0
+    if myCoins < price then
+        ex.WeatherCooldownUntil = now + 30
+        return
+    end
+    ex.WeatherCooldownUntil = now + 35
+    task.spawn(function()
+        local okW, resW = pcall(function()
+            return wRem:InvokeServer(wKey)
+        end)
+        if okW and resW then
+            Quests.notify("Weather Purchased", string.format("Bought %s (-%s coins)", wKey, Util.formatShort(price)), CONST.RARITY_COLORS.Report)
+        end
+    end)
 end
 
 function Primordial.isSpotActive(spot)
@@ -4510,18 +4795,33 @@ function Primordial.isRodValidForSpot(rodName, cfg, spot)
     return true
 end
 
-function Primordial.hasEligibleRodInUI(cfg, spot)
-    local rcCont = RodSys.getContentContainer()
-    if not rcCont then
-        return false
+function Primordial.hasEligibleRod(cfg, spot)
+    for _, rn in ipairs(State.RodData.rods or {}) do
+        if Primordial.isRodValidForSpot(rn, cfg, spot) then
+            return true
+        end
     end
-    for _, entry in ipairs(rcCont:GetChildren()) do
-        if entry:IsA("GuiObject") and entry.Visible then
-            local lower = string.lower(entry.Name)
-            if lower ~= "template" and lower ~= "example" and lower ~= "placeholder" then
-                local rName = entry:GetAttribute("RodName") or entry.Name
-                if Primordial.isRodValidForSpot(rName, cfg, spot) then
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, item in ipairs(bp:GetChildren()) do
+            if RodSys.isRod(item) then
+                local rn = item:GetAttribute("RodName") or item.Name
+                if Primordial.isRodValidForSpot(rn, cfg, spot) then
                     return true
+                end
+            end
+        end
+    end
+    local rcCont = RodSys.getContentContainer()
+    if rcCont then
+        for _, entry in ipairs(rcCont:GetChildren()) do
+            if entry:IsA("GuiObject") and entry.Visible then
+                local lower = string.lower(entry.Name)
+                if lower ~= "template" and lower ~= "example" and lower ~= "placeholder" then
+                    local rName = entry:GetAttribute("RodName") or entry.Name
+                    if Primordial.isRodValidForSpot(rName, cfg, spot) then
+                        return true
+                    end
                 end
             end
         end
@@ -4551,23 +4851,7 @@ function Primordial.isSpotEligible(spot, curLvl, gear)
     end
 
     if not Primordial.isRodValidForSpot(gear.RodName, cfg, spot) then
-        local hasAllowed = false
-        local bp = LocalPlayer:FindFirstChild("Backpack")
-        if bp then
-            for _, item in ipairs(bp:GetChildren()) do
-                if RodSys.isRod(item) then
-                    local rn = item:GetAttribute("RodName") or item.Name
-                    if Primordial.isRodValidForSpot(rn, cfg, spot) then
-                        hasAllowed = true
-                        break
-                    end
-                end
-            end
-        end
-        if not hasAllowed then
-            hasAllowed = Primordial.hasEligibleRodInUI(cfg, spot)
-        end
-        if not hasAllowed then
+        if not Primordial.hasEligibleRod(cfg, spot) then
             return false, "Need Stronger Rod"
         end
     end
@@ -5027,6 +5311,11 @@ function Magnet.isRodValidForCrystal(rodName)
 end
 
 function Magnet.hasCrystalRod()
+    for _, rn in ipairs(State.RodData.rods or {}) do
+        if Magnet.isRodValidForCrystal(rn) then
+            return true
+        end
+    end
     local gear = Monitor.getGearSummary()
     if Magnet.isRodValidForCrystal(gear.RodName) then
         return true
@@ -5225,11 +5514,18 @@ function Magnet.evaluateUpgrade()
     end
 end
 
-function Magnet.onCrystalFx(payload)
+function Magnet.onCrystalGained(payload)
     if type(payload) ~= "table" or payload.u ~= LocalPlayer.UserId then
         return
     end
     local cid = tostring(payload.c or "Crystal")
+    local now = os.clock()
+    if State.Magnet.LastCrystalFxId == cid and (now - State.Magnet.LastCrystalFxAt) < 1.5 then
+        return
+    end
+    State.Magnet.LastCrystalFxId = cid
+    State.Magnet.LastCrystalFxAt = now
+
     local sc = State.Magnet.SessionCrystals
     if sc[cid] ~= nil then
         sc[cid] += 1
@@ -5238,7 +5534,7 @@ function Magnet.onCrystalFx(payload)
     local cInfo = cfg and cfg.Crystals and cfg.Crystals[cid]
     local display = (cInfo and cInfo.Name) or (cid .. " Crystal")
     local attrName = (cInfo and cInfo.Attr) or (cid .. "Crystals")
-    local totalOwned = math.floor(tonumber(LocalPlayer:GetAttribute(attrName)) or 0)
+    local totalOwned = tonumber(payload.total) or math.floor(tonumber(LocalPlayer:GetAttribute(attrName)) or 0)
 
     Webhook.galatamaMagnet(
         string.format("[Crystal] %s Obtained!", display),
@@ -5268,6 +5564,11 @@ function Coordinator.getResumeCFrame(fallbackCF)
         return CONST.PRIMORDIAL_SPOTS[State.Primordial.CurrentEvent].CFrame
     end
     if State.Magnet.InCrystalHollow then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp and (hrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude <= 45 then
+            return hrp.CFrame
+        end
         return CFrame.new(CONST.CRYSTAL_HOLLOW_POS)
     end
     return fallbackCF
@@ -5545,19 +5846,28 @@ function Coordinator.transition(kind, data)
                 end)
 
             elseif kind == "CrystalHollow" then
-                pcall(function()
-                    LocalPlayer:RequestStreamAroundAsync(CONST.CRYSTAL_HOLLOW_POS)
-                end)
-                task.wait(0.25)
+                local cfg = Magnet.getConfig()
+                local areaName = (cfg and cfg.AreaPart) or "Saujana Crystal Hollow"
+                local box = Galatama.getBox(areaName)
+                local destCF = nil
 
-                local lookTarget = nil
-                local wHit = Water.findNearestHit(CONST.CRYSTAL_HOLLOW_POS, 36)
-                if wHit then
-                    lookTarget = Vector3.new(wHit.Position.X, CONST.CRYSTAL_HOLLOW_POS.Y, wHit.Position.Z)
+                if box and not Galatama.isInsideBox(box, CONST.CRYSTAL_HOLLOW_POS) then
+                    destCF = Galatama.findSafeFishingSpot(areaName, box)
                 end
-                local destCF = lookTarget
-                    and CFrame.lookAt(CONST.CRYSTAL_HOLLOW_POS, lookTarget)
-                    or CFrame.new(CONST.CRYSTAL_HOLLOW_POS)
+                if not destCF then
+                    pcall(function()
+                        LocalPlayer:RequestStreamAroundAsync(CONST.CRYSTAL_HOLLOW_POS)
+                    end)
+                    task.wait(0.25)
+                    local lookTarget = nil
+                    local wHit = Water.findNearestHit(CONST.CRYSTAL_HOLLOW_POS, 36)
+                    if wHit then
+                        lookTarget = Vector3.new(wHit.Position.X, CONST.CRYSTAL_HOLLOW_POS.Y, wHit.Position.Z)
+                    end
+                    destCF = lookTarget
+                        and CFrame.lookAt(CONST.CRYSTAL_HOLLOW_POS, lookTarget)
+                        or CFrame.new(CONST.CRYSTAL_HOLLOW_POS)
+                end
 
                 if not Util.stealthTeleport(destCF, nil, 0.35) then
                     return
@@ -5582,9 +5892,10 @@ function Coordinator.transition(kind, data)
                     UI.Window:Notify({ title = "Crystal Hollow Standby", content = "Farming crystals until Galatama / Primordial event.", duration = 4 })
                 end
 
+                local targetPos = destCF.Position
                 task.delay(1.8, function()
                     if curHrp and curHrp.Parent and State.Magnet.InCrystalHollow then
-                        if (curHrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude > 60 then
+                        if (curHrp.Position - targetPos).Magnitude > 60 then
                             State.Magnet.StandbyBlockedUntil = os.clock() + 120
                             State.Magnet.InCrystalHollow = false
                             Util.updateStatusTag()
@@ -5659,7 +5970,7 @@ function Coordinator.evaluate()
         end
     elseif desiredKind == "CrystalHollow" then
         local needsTP = (not State.Magnet.InCrystalHollow)
-            or ((hrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude > 60)
+            or ((hrp.Position - CONST.CRYSTAL_HOLLOW_POS).Magnitude > 75)
         if needsTP then
             Coordinator.transition("CrystalHollow", nil)
         end
@@ -5722,6 +6033,20 @@ function Perf.applyLowestGraphics()
             local clouds = terrain:FindFirstChildOfClass("Clouds")
             if clouds then
                 clouds.Enabled = false
+            end
+        end
+    end)
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        if cam then
+            for _, ch in ipairs(cam:GetChildren()) do
+                if CONST.CAMERA_FX_NAMES[ch.Name] then
+                    for _, desc in ipairs(ch:GetDescendants()) do
+                        if desc:IsA("ParticleEmitter") or desc:IsA("Trail") then
+                            desc.Enabled = false
+                        end
+                    end
+                end
             end
         end
     end)
@@ -5912,7 +6237,7 @@ end
 function Perf.applyCutsceneBlocker(enabled)
     State.Perf.DisableCutscenes = enabled
 
-    for _, k in ipairs({ "WorkspaceFx", "LightingFx", "CameraType" }) do
+    for _, k in ipairs({ "WorkspaceFx", "LightingFx", "CameraFx", "CameraType" }) do
         if Conns[k] then
             Conns[k]:Disconnect()
             Conns[k] = nil
@@ -5950,11 +6275,15 @@ function Perf.applyCutsceneBlocker(enabled)
                 Perf.hideOverlayGui(g)
             end
         end
+        local eggGui = PlayerGui:FindFirstChild("PetEggGui")
+        if eggGui then
+            Reel.bindPetEggGui(eggGui)
+        end
     end
 
     for _, child in ipairs(workspace:GetChildren()) do
         pcall(function()
-            if child:GetAttribute("FishFx") == true or child.Name == "SoreKrakenPreview" then
+            if child:GetAttribute("FishFx") == true or CONST.WORKSPACE_FX_NAMES[child.Name] then
                 child:Destroy()
             end
         end)
@@ -5972,7 +6301,7 @@ function Perf.applyCutsceneBlocker(enabled)
             return
         end
         pcall(function()
-            if child:GetAttribute("FishFx") == true or child.Name == "SoreKrakenPreview" then
+            if child:GetAttribute("FishFx") == true or CONST.WORKSPACE_FX_NAMES[child.Name] then
                 task.defer(function()
                     if child.Parent then
                         pcall(function()
@@ -5986,7 +6315,7 @@ function Perf.applyCutsceneBlocker(enabled)
 
     for _, child in ipairs(Svc.Lighting:GetChildren()) do
         pcall(function()
-            if child.Name == "LevelUpBlur" or child.Name == "SaujanaCoffeeBlur" then
+            if CONST.BLUR_FX_NAMES[child.Name] then
                 child:Destroy()
             end
         end)
@@ -5997,7 +6326,7 @@ function Perf.applyCutsceneBlocker(enabled)
             return
         end
         pcall(function()
-            if child.Name == "LevelUpBlur" or child.Name == "SaujanaCoffeeBlur" then
+            if CONST.BLUR_FX_NAMES[child.Name] then
                 task.defer(function()
                     if child.Parent then
                         pcall(function()
@@ -6011,6 +6340,43 @@ function Perf.applyCutsceneBlocker(enabled)
 
     local cam = workspace.CurrentCamera
     if cam then
+        for _, child in ipairs(cam:GetChildren()) do
+            pcall(function()
+                if CONST.WORKSPACE_FX_NAMES[child.Name] then
+                    child:Destroy()
+                elseif CONST.CAMERA_FX_NAMES[child.Name] then
+                    for _, desc in ipairs(child:GetDescendants()) do
+                        if desc:IsA("ParticleEmitter") or desc:IsA("Trail") then
+                            desc.Enabled = false
+                        end
+                    end
+                end
+            end)
+        end
+        Conns.CameraFx = cam.ChildAdded:Connect(function(child)
+            if not State.Perf.DisableCutscenes then
+                return
+            end
+            pcall(function()
+                if CONST.WORKSPACE_FX_NAMES[child.Name] then
+                    task.defer(function()
+                        if child.Parent then
+                            pcall(function()
+                                child:Destroy()
+                            end)
+                        end
+                    end)
+                elseif CONST.CAMERA_FX_NAMES[child.Name] then
+                    task.defer(function()
+                        for _, desc in ipairs(child:GetDescendants()) do
+                            if desc:IsA("ParticleEmitter") or desc:IsA("Trail") then
+                                desc.Enabled = false
+                            end
+                        end
+                    end)
+                end
+            end)
+        end)
         pcall(function()
             if cam.CameraType == Enum.CameraType.Scriptable then
                 cam.CameraType = Enum.CameraType.Custom
@@ -6072,7 +6438,7 @@ function RodSys.score(rodName, obj)
         local cfg = spot and Cfg.get(spot.CfgName)
         if spot and cfg then
             if Primordial.isRodValidForSpot(rodName, cfg, spot) then
-                score += 10000
+                score += 10000 + ((mods.PrimordialMult - 1) * 5000)
                 if State.Primordial.SwapEventRod and rodName == spot.PreferRod then
                     score += 1000
                 end
@@ -6118,14 +6484,18 @@ function RodSys.unequip()
     return true
 end
 
-function RodSys.findBestBackpack(bp)
+function RodSys.findBestBackpack(bp, targetName)
     if not bp then
         return nil
     end
     local best, bestScore = nil, -999999
     for _, c in ipairs(bp:GetChildren()) do
         if RodSys.isRod(c) then
-            local sc = RodSys.score(c:GetAttribute("RodName") or c.Name, c)
+            local rName = c:GetAttribute("RodName") or c.Name
+            if targetName and rName == targetName then
+                return c
+            end
+            local sc = RodSys.score(rName, c)
             if not best or sc > bestScore then
                 best = c
                 bestScore = sc
@@ -6200,6 +6570,81 @@ function RodSys.findBestContentTarget()
     return (bestTarget:FindFirstChildWhichIsA("GuiButton", true) or bestTarget), bestTarget, bestScore
 end
 
+function RodSys.bestOwnedRodName()
+    local bestName, bestScore = nil, -999999
+    for _, rName in ipairs(State.RodData.rods or {}) do
+        local sc = RodSys.score(rName, nil)
+        if not bestName or sc > bestScore then
+            bestName = rName
+            bestScore = sc
+        end
+    end
+    local char = LocalPlayer.Character
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    for _, cont in ipairs({ char, bp }) do
+        if cont then
+            for _, item in ipairs(cont:GetChildren()) do
+                if RodSys.isRod(item) then
+                    local rName = item:GetAttribute("RodName") or item.Name
+                    local sc = RodSys.score(rName, item)
+                    if not bestName or sc > bestScore then
+                        bestName = rName
+                        bestScore = sc
+                    end
+                end
+            end
+        end
+    end
+    return bestName, bestScore
+end
+
+function RodSys.checkBestBait()
+    if not State.EnabledAutoEquipBait or State.InAfkServer then
+        return
+    end
+    local eqBaitRem = Remotes.EquipBait
+    if not eqBaitRem or not eqBaitRem.Parent then
+        return
+    end
+    local baits = State.RodData.baits
+    if type(baits) ~= "table" or #baits == 0 then
+        return
+    end
+    local now = os.clock()
+    if (now - State.LastBaitSwapAt) < 5 then
+        return
+    end
+    local bc = Cfg.get("BaitConfig")
+    if not bc or type(bc.get) ~= "function" then
+        return
+    end
+    local bestBait, bestLuck = nil, -1
+    for _, bName in ipairs(baits) do
+        local info = bc.get(bName)
+        local lk = info and tonumber(info.Luck) or 0
+        if not bestBait or lk > bestLuck then
+            bestBait = bName
+            bestLuck = lk
+        end
+    end
+    local curBait = Monitor.getBaitName()
+    if bestBait and bestBait ~= curBait then
+        State.LastBaitSwapAt = now
+        task.spawn(function()
+            local okB, resB, _, newSt = pcall(function()
+                return eqBaitRem:InvokeServer(bestBait)
+            end)
+            if okB and resB then
+                State.DetectedBait = bestBait
+                if type(newSt) == "table" then
+                    Monitor.syncRodState(newSt)
+                end
+                Cache.GearSummary = nil
+            end
+        end)
+    end
+end
+
 function RodSys.canAutoEquip()
     if not State.EnabledAutoEquip or State.Coffee.HoldingTool or Util.isActionLocked() or State.InAfkServer then
         return false
@@ -6207,6 +6652,42 @@ function RodSys.canAutoEquip()
     if State.EnabledPauseNoWater and State.IsFarmPausedNoWater then
         return false
     end
+    return true
+end
+
+function RodSys.invokeEquipRemote(rodName)
+    local eqRem = Remotes.EquipRod
+    if not eqRem or not eqRem.Parent or type(rodName) ~= "string" then
+        return false
+    end
+    local now = os.clock()
+    if (now - State.LastUiRodClickAt) < 1.0 then
+        return false
+    end
+    State.LastUiRodClickAt = now
+    task.spawn(function()
+        local okE, resE, _, newSt = pcall(function()
+            return eqRem:InvokeServer(rodName)
+        end)
+        if okE and resE then
+            if type(newSt) == "table" then
+                Monitor.syncRodState(newSt)
+            end
+            Cache.GearSummary = nil
+            task.wait(0.12)
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if RodSys.canAutoEquip() and char and hum and hum.Health > 0 and not RodSys.findEquipped(char) then
+                local tool = RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"), rodName)
+                if tool then
+                    pcall(function()
+                        hum:EquipTool(tool)
+                    end)
+                    State.WaitingForBite = false
+                end
+            end
+        end
+    end)
     return true
 end
 
@@ -6223,13 +6704,21 @@ function RodSys.equip()
         return
     end
 
-    local bpTool = RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"))
+    local bestName = RodSys.bestOwnedRodName()
+    local bpTool = RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"), bestName)
     if bpTool then
-        pcall(function()
-            hum:EquipTool(bpTool)
-        end)
-        State.WaitingForBite = false
-        Cache.GearSummary = nil
+        local bpName = bpTool:GetAttribute("RodName") or bpTool.Name
+        if not bestName or bpName == bestName then
+            pcall(function()
+                hum:EquipTool(bpTool)
+            end)
+            State.WaitingForBite = false
+            Cache.GearSummary = nil
+            return
+        end
+    end
+
+    if bestName and RodSys.invokeEquipRemote(bestName) then
         return
     end
 
@@ -6256,6 +6745,12 @@ function RodSys.equip()
                 end
             end
         end)
+    elseif bpTool then
+        pcall(function()
+            hum:EquipTool(bpTool)
+        end)
+        State.WaitingForBite = false
+        Cache.GearSummary = nil
     end
 end
 
@@ -6275,7 +6770,25 @@ function RodSys.recheckBestRod()
         return
     end
 
-    local heldScore = RodSys.score(held:GetAttribute("RodName") or held.Name, held)
+    local heldName = held:GetAttribute("RodName") or held.Name
+    local heldScore = RodSys.score(heldName, held)
+    local bestName, bestScore = RodSys.bestOwnedRodName()
+
+    if bestName and bestName ~= heldName and bestScore > heldScore + 0.01 then
+        local bpMatch = RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"), bestName)
+        if bpMatch and (bpMatch:GetAttribute("RodName") or bpMatch.Name) == bestName then
+            pcall(function()
+                hum:EquipTool(bpMatch)
+            end)
+            State.WaitingForBite = false
+            Cache.GearSummary = nil
+            return
+        end
+        if RodSys.invokeEquipRemote(bestName) then
+            return
+        end
+    end
+
     local bpBest = RodSys.findBestBackpack(LocalPlayer:FindFirstChild("Backpack"))
     if bpBest then
         local bpScore = RodSys.score(bpBest:GetAttribute("RodName") or bpBest.Name, bpBest)
@@ -6307,6 +6820,7 @@ function Binder.onAfkServerChanged()
     Util.updateStatusTag()
     if inAfk and not prev then
         State.AfkEnteredAt = os.clock()
+        State.AfkNudged = false
         State.WaitingForBite = false
         State.BiteActive = false
         sendAntiAFKPulse()
@@ -6320,6 +6834,7 @@ function Binder.onAfkServerChanged()
         Webhook.alert("Moved to AFK Server", "Game moved player into an AFK Server (InAfkServer = true).", CONST.RARITY_COLORS.Afk, true)
     elseif not inAfk and prev then
         State.AfkEnteredAt = 0
+        State.AfkNudged = false
         if UI.Window then
             task.defer(function()
                 pcall(function()
@@ -6335,6 +6850,53 @@ function Binder.onAfkServerChanged()
     end
 end
 
+function Binder.onZoneKicked(reasons)
+    local curKey = State.Primordial.CurrentEvent
+    if curKey then
+        State.Primordial.BlockedUntil[curKey] = os.clock() + 300
+        State.Primordial.CurrentEvent = nil
+        Util.updateStatusTag()
+    end
+    local rsnText = type(reasons) == "table" and table.concat(reasons, ", ") or tostring(reasons or "Restricted")
+    if UI.Window then
+        UI.Window:Notify({ title = "Zone Guard Kicked", content = "Server returned player (" .. rsnText .. "). Cooling down 5m.", duration = 4 })
+    end
+    Webhook.alert("Zone Guard Kicked", "Blocked from zone: " .. rsnText, CONST.RARITY_COLORS.Alert)
+    task.delay(0.8, Coordinator.evaluate)
+end
+
+function Binder.onZoneNotice(msg)
+    local curKey = State.Primordial.CurrentEvent
+    if curKey then
+        State.Primordial.BlockedUntil[curKey] = os.clock() + 300
+        State.Primordial.CurrentEvent = nil
+        Util.updateStatusTag()
+    end
+    if State.Magnet.InCrystalHollow then
+        State.Magnet.StandbyBlockedUntil = os.clock() + 300
+        State.Magnet.InCrystalHollow = false
+        Util.updateStatusTag()
+    end
+    if UI.Window then
+        UI.Window:Notify({ title = "Zone Guard Notice", content = tostring(msg), duration = 4 })
+    end
+    task.delay(0.8, Coordinator.evaluate)
+end
+
+function Binder.onKrakenHit()
+    if State.Perf.DisableCutscenes then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            task.defer(function()
+                if hrp.Parent then
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end
+            end)
+        end
+    end
+end
+
 function Binder.bindServerRemote(remote)
     if Conns.Server then
         Conns.Server:Disconnect()
@@ -6346,14 +6908,12 @@ function Binder.bindServerRemote(remote)
     end
 end
 
-function Binder.bindCrystalFxRemote(remote)
-    if Conns.CrystalFx then
-        Conns.CrystalFx:Disconnect()
-        Conns.CrystalFx = nil
+function Binder.bindCrystalRemotes()
+    if Remotes.CrystalFx and Remotes.CrystalFx.Parent and not Conns.CrystalFx then
+        Conns.CrystalFx = Remotes.CrystalFx.OnClientEvent:Connect(Magnet.onCrystalGained)
     end
-    Remotes.CrystalFx = remote
-    if remote then
-        Conns.CrystalFx = remote.OnClientEvent:Connect(Magnet.onCrystalFx)
+    if Remotes.CrystalDrop and Remotes.CrystalDrop.Parent and not Conns.CrystalDrop then
+        Conns.CrystalDrop = Remotes.CrystalDrop.OnClientEvent:Connect(Magnet.onCrystalGained)
     end
 end
 
@@ -6366,6 +6926,18 @@ function Binder.bindGalatamaRemotes()
     end
     if Remotes.GalatamaResult and Remotes.GalatamaResult.Parent and not Conns.GalatamaResult then
         Conns.GalatamaResult = Remotes.GalatamaResult.OnClientEvent:Connect(Galatama.onResult)
+    end
+end
+
+function Binder.bindGuardRemotes()
+    if Remotes.SoreKrakenKicked and Remotes.SoreKrakenKicked.Parent and not Conns.SoreKrakenKicked then
+        Conns.SoreKrakenKicked = Remotes.SoreKrakenKicked.OnClientEvent:Connect(Binder.onZoneKicked)
+    end
+    if Remotes.SoreKrakenHit and Remotes.SoreKrakenHit.Parent and not Conns.SoreKrakenHit then
+        Conns.SoreKrakenHit = Remotes.SoreKrakenHit.OnClientEvent:Connect(Binder.onKrakenHit)
+    end
+    if Remotes.ZoneGuardNotice and Remotes.ZoneGuardNotice.Parent and not Conns.ZoneGuardNotice then
+        Conns.ZoneGuardNotice = Remotes.ZoneGuardNotice.OnClientEvent:Connect(Binder.onZoneNotice)
     end
 end
 
@@ -6386,6 +6958,11 @@ function Binder.cacheUI()
         end
     end
 
+    local eggGui = PlayerGui:FindFirstChild("PetEggGui")
+    if eggGui then
+        Reel.bindPetEggGui(eggGui)
+    end
+
     clearConnList(Conns.PrimNotif)
     for _, key in ipairs(CONST.PRIMORDIAL_ORDER) do
         local nGui = PlayerGui:FindFirstChild(CONST.PRIMORDIAL_SPOTS[key].NotifUI)
@@ -6404,6 +6981,7 @@ function Binder.cacheUI()
     end
 
     local gui = PlayerGui:FindFirstChild("FishingGui")
+    Cache.FishingGui = gui
     if gui then
         Cache.AutoBtn = gui:FindFirstChild("AutoFishingButton", true)
         if Cache.AutoBtn then
@@ -6442,9 +7020,13 @@ function Binder.resolveRemotes()
             { "SellAll", "SellAll" },
             { "SetAuto", "SetAuto" },
             { "GetState", "GetState" },
+            { "GetStats", "GetStats" },
             { "GetFish", "GetFish" },
             { "ToggleFavorite", "ToggleFavorite" },
+            { "EquipRod", "EquipRod" },
+            { "EquipBait", "EquipBait" },
             { "CrystalDrop", "CrystalDrop" },
+            { "CrystalFx", "CrystalFx" },
             { "MagnetUpgrade", "MagnetUpgrade" },
             { "AqualithState", "AqualithState" },
             { "AqualithWish", "AqualithWish" },
@@ -6471,6 +7053,8 @@ function Binder.resolveRemotes()
         },
         SoreKrakenRemotes = {
             { "SoreKrakenQuest", "Quest" },
+            { "SoreKrakenKicked", "Kicked" },
+            { "SoreKrakenHit", "KrakenHit" },
         },
         EventRemotes = {
             { "EventGet", "Get" },
@@ -6482,6 +7066,9 @@ function Binder.resolveRemotes()
             { "GalatamaBoard", "Board" },
             { "GalatamaNotify", "Notify" },
             { "GalatamaResult", "Result" },
+        },
+        WeatherRemotes = {
+            { "WeatherBuy", "Buy" },
         },
     }
 
@@ -6496,18 +7083,16 @@ function Binder.resolveRemotes()
         end
     end
 
+    if not Binder.isRemoteValid(Remotes.ZoneGuardNotice) then
+        Remotes.ZoneGuardNotice = Svc.ReplicatedStorage:FindFirstChild("ZoneGuardNotice")
+    end
+
     local fr = Svc.ReplicatedStorage:FindFirstChild("FishRemotes")
     if fr then
         if not Binder.isRemoteValid(Remotes.Server) then
             local srv = fr:FindFirstChild("Server")
             if srv then
                 Binder.bindServerRemote(srv)
-            end
-        end
-        if not Binder.isRemoteValid(Remotes.CrystalFx) then
-            local cfx = fr:FindFirstChild("CrystalFx")
-            if cfx then
-                Binder.bindCrystalFxRemote(cfx)
             end
         end
         if not Binder.isRemoteValid(Remotes.Fx) then
@@ -6523,7 +7108,9 @@ function Binder.resolveRemotes()
         end
     end
 
+    Binder.bindCrystalRemotes()
     Binder.bindGalatamaRemotes()
+    Binder.bindGuardRemotes()
     return Binder.isRemoteValid(Remotes.Cast)
 end
 
@@ -6536,10 +7123,14 @@ function Binder.allRemotesReady()
         "Server",
         "Fx",
         "CrystalFx",
+        "CrystalDrop",
         "MagnetUpgrade",
         "GetState",
+        "GetStats",
         "GetFish",
         "ToggleFavorite",
+        "EquipRod",
+        "EquipBait",
         "AqualithState",
         "AqualithWish",
         "DexterGamble",
@@ -6550,12 +7141,14 @@ function Binder.allRemotesReady()
         "QuestClaimAdventure",
         "DailyLoginGetState",
         "SoreKrakenQuest",
+        "SoreKrakenKicked",
         "EventGet",
         "EventClaim",
         "GalatamaTeleport",
         "GalatamaBoard",
         "GalatamaNotify",
         "GalatamaResult",
+        "WeatherBuy",
     }) do
         if not Binder.isRemoteValid(Remotes[key]) then
             return false
@@ -6646,7 +7239,24 @@ function Engine.slowTick(now)
     end
 
     if State.InAfkServer and State.Perf.EscapeAfkServer and State.EnabledCast and not State.Perf.IsRejoining then
-        if State.AfkEnteredAt > 0 and (now - State.AfkEnteredAt) >= 20 then
+        local elapsedAfk = State.AfkEnteredAt > 0 and (now - State.AfkEnteredAt) or 0
+        if not State.AfkNudged and elapsedAfk >= 8 then
+            State.AfkNudged = true
+            pcall(function()
+                Svc.VirtualUser:CaptureController()
+                Svc.VirtualUser:SetKeyDown(" ")
+                task.delay(0.1, function()
+                    pcall(function()
+                        Svc.VirtualUser:SetKeyUp(" ")
+                    end)
+                end)
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.Jump = true
+                end
+            end)
+        elseif elapsedAfk >= 20 then
             Webhook.alert("Escaping AFK Server", "Teleporting back to main game server to resume farming.", CONST.RARITY_COLORS.Afk, true)
             task.delay(1.5, Util.triggerRejoin)
             return
@@ -6682,6 +7292,10 @@ function Engine.slowTick(now)
     end
     if State.Extras.IsBusy and (now - State.Extras.BusyStartedAt) >= 35 then
         State.Extras.IsBusy = false
+    end
+    if State.IsSellingTp and (now - State.SellingTpStartedAt) >= 18 then
+        State.IsSellingTp = false
+        State.IsSelling = false
     end
 
     if State.EnabledCast and not State.IsFarmPausedNoWater and not State.InAfkServer and not Util.isActionLocked() and (now - State.LastServerActivityAt) >= 45 then
@@ -6748,6 +7362,11 @@ function Engine.slowTick(now)
         task.spawn(Extras.checkDexter)
     end
 
+    if State.Extras.AutoBuyWeather ~= "Off" and (now - State.Extras.LastWeatherCheckAt) >= 15 and now >= State.Extras.WeatherCooldownUntil then
+        State.Extras.LastWeatherCheckAt = now
+        Extras.checkWeatherBuy()
+    end
+
     if State.Maze.AutoDaily
         and not State.InAfkServer
         and not Util.isActionLocked()
@@ -6778,8 +7397,12 @@ function Engine.slowTick(now)
         State.LastRodCheckAt = now
         if State.EnabledPauseNoWater and State.IsFarmPausedNoWater and not State.BiteActive and not State.WaitingForBite then
             RodSys.unequip()
-        elseif RodSys.canAutoEquip() and LocalPlayer.Character and not RodSys.findEquipped(LocalPlayer.Character) then
-            RodSys.equip()
+        elseif RodSys.canAutoEquip() and LocalPlayer.Character then
+            if not RodSys.findEquipped(LocalPlayer.Character) then
+                RodSys.equip()
+            else
+                RodSys.recheckBestRod()
+            end
         end
     end
 
@@ -6789,10 +7412,10 @@ function Engine.slowTick(now)
         if bagCnt ~= nil and bagCnt == 0 then
             State.LastSellTime = now
         elseif bagCnt ~= nil and bagLim > 0 and bagCnt >= (bagLim - 2) and now >= State.ProactiveSellCooldownUntil then
-            Reel.invokeSellAll(true)
+            Reel.invokeSellAll(true, true)
         elseif (now - State.LastSellTime) >= State.SellInterval then
             if bagCnt == nil or bagCnt > 0 then
-                Reel.invokeSellAll(false)
+                Reel.invokeSellAll(false, false)
             else
                 State.LastSellTime = now
             end
@@ -6872,7 +7495,7 @@ function Engine.updateLoop()
         or State.EnabledGameAutoCast or State.EnabledAutoEquip or State.Primordial.Enabled
         or State.Galatama.Enabled or State.Magnet.AutoUpgrade or State.Magnet.CrystalHollowStandby
         or State.Coffee.Enabled or (State.Quests.Mode ~= "Disabled") or State.Maze.AutoDaily
-        or State.Extras.AutoAqualith or State.Extras.AutoDexter
+        or State.Extras.AutoAqualith or State.Extras.AutoDexter or (State.Extras.AutoBuyWeather ~= "Off")
         or (State.Webhook.Enabled and State.Webhook.PeriodicReport))
     if shouldRun then
         if not Conns.Heartbeat then
@@ -6990,13 +7613,25 @@ do
         end,
     })
     FarmTab:CreateToggle({
-        name = "Auto Equip Rod",
+        name = "Auto Equip Best Rod",
         flag = "AutoEquipRod",
         value = true,
         callback = function(v)
             State.EnabledAutoEquip = v
             if v then
-                RodSys.equip()
+                RodSys.recheckBestRod()
+            end
+        end,
+    })
+    UI.AutoEquipBaitToggle = FarmTab:CreateToggle({
+        name = "Auto Equip Best Bait",
+        flag = "AutoEquipBait",
+        value = true,
+        callback = function(v)
+            State.EnabledAutoEquipBait = v
+            if v then
+                State.LastBaitSwapAt = 0
+                task.defer(RodSys.checkBestBait)
             end
         end,
     })
@@ -7010,7 +7645,7 @@ do
         end,
     })
     FarmTab:CreateToggle({
-        name = "Auto Sell",
+        name = "Auto Sell (incl. NPC Fallback)",
         flag = "AutoSell",
         value = false,
         callback = function(v)
@@ -7091,9 +7726,22 @@ do
         end,
     })
     FarmTab:CreateButton({
-        name = "Show Magnet & Crystal Status",
+        name = "Show Magnet, Stats & Pity",
         callback = function()
-            UI.Window:Notify({ title = "Magnet Status", content = Magnet.getStatusSummary(), duration = 4 })
+            task.spawn(function()
+                local st = Monitor.getServerStats(true)
+                local msg = Magnet.getStatusSummary()
+                if type(st) == "table" then
+                    msg = string.format(
+                        "%s\nPity M:%d/%d S:%d/%d Sup:%d/%d",
+                        msg,
+                        tonumber(st.mythicPity) or 0, tonumber(st.mythicGuarantee) or 350,
+                        tonumber(st.secretPity) or 0, tonumber(st.secretGuarantee) or 2600,
+                        tonumber(st.supremacyPity) or 0, tonumber(st.supremacyGuarantee) or 5000
+                    )
+                end
+                UI.Window:Notify({ title = "Magnet & Pity Status", content = msg, duration = 5 })
+            end)
         end,
     })
 
@@ -7216,6 +7864,15 @@ do
             task.defer(Coordinator.evaluate)
         end,
     })
+    UI.CheckUnlocksToggle = EventTab:CreateToggle({
+        name = "Check Unlock Attributes",
+        flag = "PrimordialCheckUnlocks",
+        value = true,
+        callback = function(v)
+            State.Primordial.CheckUnlocks = v
+            task.defer(Coordinator.evaluate)
+        end,
+    })
     EventTab:CreateDropdown({
         name = "Event Overlap Priority",
         options = { "Galatama First", "Primordial First", "Galatama Only" },
@@ -7277,15 +7934,6 @@ do
         value = false,
         callback = function(v)
             State.Primordial.ReturnHome = v
-        end,
-    })
-    EventTab:CreateToggle({
-        name = "Check Unlock Attributes",
-        flag = "PrimordialCheckUnlocks",
-        value = false,
-        callback = function(v)
-            State.Primordial.CheckUnlocks = v
-            task.defer(Coordinator.evaluate)
         end,
     })
 
@@ -7482,7 +8130,7 @@ do
         end)
     end
 
-    EventTab:CreateSection({ name = "Aqualith & Dexter (Optional)" })
+    EventTab:CreateSection({ name = "Aqualith, Dexter & Weather (Optional)" })
     EventTab:CreateToggle({
         name = "Auto Aqualith Wishes",
         flag = "AutoAqualithWishes",
@@ -7526,6 +8174,24 @@ do
             State.Extras.DexterOffering = (sel == "1 Supremacy Fish") and "1 Supremacy Fish" or "3 Secret Fish"
         end,
     })
+    EventTab:CreateDropdown({
+        name = "Auto Buy Weather (Coins)",
+        options = { "Off", "Winter (220M)", "Meteor (125M)", "Storm (75M)", "Rain (40M)" },
+        value = "Off",
+        flag = "AutoBuyWeather",
+        callback = function(sel)
+            if type(sel) == "table" then
+                sel = sel[1]
+            end
+            if sel == "Winter (220M)" or sel == "Meteor (125M)" or sel == "Storm (75M)" or sel == "Rain (40M)" then
+                State.Extras.AutoBuyWeather = sel
+            else
+                State.Extras.AutoBuyWeather = "Off"
+            end
+            State.Extras.WeatherCooldownUntil = 0
+            Engine.updateLoop()
+        end,
+    })
 end
 
 do
@@ -7560,6 +8226,7 @@ do
                 return
             end
             task.spawn(function()
+                Monitor.getServerStats(true)
                 local embed = Webhook.buildReport("Live Farm Report (v" .. SCRIPT_VERSION .. ")", CONST.RARITY_COLORS.Report)
                 embed.timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
                 embed.footer = { text = string.format("Saujana Hub v%s • %s", SCRIPT_VERSION, LocalPlayer.Name) }
@@ -7705,7 +8372,7 @@ do
         end,
     })
     PerfTab:CreateToggle({
-        name = "Auto Close LevelUp & Modals",
+        name = "Auto Close LevelUp, Eggs & Modals",
         flag = "AutoCloseLevelUp",
         value = true,
         callback = function(v)
@@ -7716,6 +8383,10 @@ do
                     if mg then
                         Reel.closeModalPopup(mg)
                     end
+                end
+                local eggGui = PlayerGui:FindFirstChild("PetEggGui")
+                if eggGui then
+                    Reel.bindPetEggGui(eggGui)
                 end
             end
         end,
@@ -7768,6 +8439,8 @@ if PlayerGui then
             Binder.cacheUI()
         elseif CONST.MODAL_POPUP_GUIS[c.Name] then
             task.defer(Reel.bindModalPopup, c)
+        elseif c.Name == "PetEggGui" then
+            task.defer(Reel.bindPetEggGui, c)
         elseif c.Name == "CelestraNotifUI" or c.Name == "ThalvyraNotifUI" or c.Name == "SoreKrakenNotifUI" then
             task.defer(Primordial.bindNotifUI, c)
         elseif CONST.BLOCKED_FX_GUIS[c.Name] and State.Perf.DisableCutscenes then
@@ -7789,6 +8462,7 @@ if PlayerGui then
             end)
         elseif c.Name == "FishingGui" then
             Cache.AutoBtn = nil
+            Cache.FishingGui = nil
             if Conns.Gradient then
                 Conns.Gradient:Disconnect()
                 Conns.Gradient = nil
@@ -7899,11 +8573,13 @@ end)
 
 State.EnabledCast = true
 State.EnabledFastSafeReel = true
+State.EnabledAutoEquipBait = true
 State.EnabledGameAutoCast = false
 State.EnabledSmartWaterAim = true
 State.Galatama.Enabled = true
 State.Galatama.RequireMinPlayers = true
 State.Galatama.Priority = "Galatama First"
+State.Primordial.CheckUnlocks = true
 State.Primordial.ReturnHome = false
 State.Magnet.AutoUpgrade = true
 State.Magnet.CrystalHollowStandby = (envGlobal.AutoFishCrystalStandby ~= false)
@@ -7917,8 +8593,14 @@ end
 if UI.FastSafeReelToggle and UI.FastSafeReelToggle.Set then
     UI.FastSafeReelToggle:Set(true)
 end
+if UI.AutoEquipBaitToggle and UI.AutoEquipBaitToggle.Set then
+    UI.AutoEquipBaitToggle:Set(true)
+end
 if UI.GalatamaToggle and UI.GalatamaToggle.Set then
     UI.GalatamaToggle:Set(true)
+end
+if UI.CheckUnlocksToggle and UI.CheckUnlocksToggle.Set then
+    UI.CheckUnlocksToggle:Set(true)
 end
 if UI.AutoUpgradeMagnetToggle and UI.AutoUpgradeMagnetToggle.Set then
     UI.AutoUpgradeMagnetToggle:Set(true)
@@ -7982,7 +8664,7 @@ task.defer(function()
     pcall(function()
         UI.Window:Notify({
             title = "Saujana Hub v" .. SCRIPT_VERSION,
-            content = State.Webhook.Enabled and "Ready • All Systems + Galatama/Magnet + Webhook Active" or "Ready • All Systems + Galatama/Magnet Active",
+            content = State.Webhook.Enabled and "Ready • All Systems + Direct Remotes + Webhook Active" or "Ready • All Systems + Direct Remotes Active",
             duration = 4,
         })
     end)
